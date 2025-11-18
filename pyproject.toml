@@ -5,19 +5,23 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "beautifulsoup4>=4.12.0",
     "docling>=2.61.2",
     "langchain>=0.3.27",
     "langchain-anthropic>=0.3.22",
     "langchain-astradb>=0.6.1",
     "langchain-community>=0.3.31",
-    "langchain-google-genai>=2.1.12",
+    "langchain-google-genai>=2.0.0",
     "langchain-nvidia-ai-endpoints>=0.3.18",
+    "lxml>=4.9.0",
     "pdf2image>=1.17.0",
     "pdfminer>=20191125",
     "pillow>=11.3.0",
     "pip>=25.3",
     "pymupdf>=1.26.5",
     "pypdf>=6.1.1",
+    "python-dotenv>=1.0.0",
+    "requests>=2.31.0",
     "streamlit>=1.50.0",
     "unstructured[pdf]>=0.18.15",
 ]
