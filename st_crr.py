@@ -67,6 +67,7 @@ Important guidelines:
 Context: {context}
 
 Question: {question}
+     
 
 Please provide a comprehensive answer with specific references to articles and provisions.""")
 ])
