@@ -138,5 +138,6 @@ if st.button("🔍 Search & Answer", type="primary"):
                         
             except Exception as e:
                 st.error(f"Error: {e}")
+                
     else:
         st.warning("Please enter a question.")
