@@ -124,6 +124,7 @@ if st.button("🔍 Search & Answer", type="primary"):
                 # Get answer
                 answer = rag_chain.invoke(question)
                 
+                
                 # Display results
                 st.subheader("📋 Legal Analysis")
                 st.write(answer)
