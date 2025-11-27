@@ -3727,7 +3727,6 @@ name = "rag-new"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "beautifulsoup4" },
     { name = "docling" },
     { name = "langchain" },
     { name = "langchain-anthropic" },
@@ -3750,7 +3749,6 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "beautifulsoup4", specifier = ">=4.12.0" },
     { name = "docling", specifier = ">=2.61.2" },
     { name = "langchain", specifier = ">=0.3.27" },
     { name = "langchain-anthropic", specifier = ">=0.3.22" },
