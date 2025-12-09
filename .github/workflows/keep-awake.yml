@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Ping Streamlit
-        run: curl -fsS --retry 5 "${{ secrets.STREAMLIT_APP_URL }}"
+        run: curl -fsS --retry 5 "${{ secrets.MY_STREAMLIT_APP }}"
 
       - name: Ping Astra DB + Resume if hibernated
         env:
