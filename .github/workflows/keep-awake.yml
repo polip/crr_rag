@@ -1,0 +1,28 @@
+name: Ultra-Safe Keep-Alive
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'   # Every 6 hours
+  workflow_dispatch:
+
+jobs:
+  keep-alive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Streamlit
+        run: curl -fsS --retry 5 "${{ secrets.STREAMLIT_APP_URL }}"
+
+      - name: Ping Astra DB + Resume if hibernated
+        env:
+          ASTRA_TOKEN: ${{ secrets.ASTRA_TOKEN }}
+          ASTRA_DB_ID: ${{ secrets.ASTRA_DB_ID }}
+          ASTRA_REGION: ${{ secrets.ASTRA_REGION }}
+        run: |
+          URL="https://${ASTRA_DB_ID}-${ASTRA_REGION}.apps.astra.datastax.com/api/rest/v2/schemas/keyspaces"
+          if ! curl -fsS -H "X-Cassandra-Token: $ASTRA_TOKEN" "$URL" > /dev/null; then
+            echo "DB might be hibernated – attempting resume via API"
+            curl -X POST -H "X-Cassandra-Token: $ASTRA_TOKEN" \
+                 "https://${ASTRA_DB_ID}-${ASTRA_REGION}.apps.astra.datastax.com/v2/databases/${ASTRA_DB_ID}/resume"
+            sleep 60
+            curl -fsS -H "X-Cassandra-Token: $ASTRA_TOKEN" "$URL"
+          fi
