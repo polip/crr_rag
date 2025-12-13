@@ -24,13 +24,13 @@ jobs:
       - name: 🗄️ Check Astra DB Status
         id: check-db
         env:
-          ASTRA_DB_TOKEN: ${{ secrets.ASTRA_TOKEN }}
+          ASTRA_DB_TOKEN: ${{ secrets.ASTRA_DB_TOKEN }}
           ASTRA_DB_API_ENDPOINT: ${{ secrets.ASTRA_DB_API_ENDPOINT }}
         run: |
           echo "Checking Astra DB..."
           # Try to ping the database using the API endpoint
           if curl -fsS --max-time 10 \
-               -H "X-Cassandra-Token: $ASTRA_TOKEN" \
+               -H "X-Cassandra-Token: $ASTRA_DB_TOKEN" \
                "$ASTRA_DB_API_ENDPOINT/api/rest/v2/schemas/keyspaces" > /dev/null 2>&1; then
             echo "✅ Astra DB is active"
             echo "status=active" >> $GITHUB_OUTPUT
@@ -42,13 +42,13 @@ jobs:
       - name: 🔄 Resume Astra DB if Hibernated
         if: steps.check-db.outputs.status == 'hibernated'
         env:
-          ASTRA_DB_TOKEN: ${{ secrets.ASTRA_TOKEN }}
+          ASTRA_DB_TOKEN: ${{ secrets.ASTRA_DB_TOKEN }}
           ASTRA_DB_ID: ${{ secrets.ASTRA_DB_ID }}
         run: |
           echo "Attempting to resume hibernated database..."
           # Use DevOps API to resume database
           RESPONSE=$(curl -X POST \
-            -H "Authorization: Bearer $ASTRA_TOKEN" \
+            -H "Authorization: Bearer $ASTRA_DB_TOKEN" \
             -H "Content-Type: application/json" \
             -w "\n%{http_code}" \
             "https://api.astra.datastax.com/v2/databases/$ASTRA_DB_ID/resume")
@@ -76,14 +76,14 @@ jobs:
 
       - name: 📊 Run Health Check
         env:
-          ASTRA_DB_TOKEN: ${{ secrets.ASTRA_TOKEN }}
+          ASTRA_DB_TOKEN: ${{ secrets.ASTRA_DB_TOKEN }}
           ASTRA_DB_API_ENDPOINT: ${{ secrets.ASTRA_DB_API_ENDPOINT }}
         run: |
           echo "Running final health check..."
           
           # Check keyspaces
           KEYSPACES=$(curl -fsS \
-            -H "X-Cassandra-Token: $ASTRA_TOKEN" \
+            -H "X-Cassandra-Token: $ASTRA_DB_TOKEN" \
             "$ASTRA_DB_API_ENDPOINT/api/rest/v2/schemas/keyspaces")
           
           echo "Available keyspaces: $KEYSPACES"
