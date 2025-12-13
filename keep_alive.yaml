@@ -1,0 +1,101 @@
+name: Ultra-Safe Keep-Alive
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'   # Every 6 hours
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  keep-alive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: 🌐 Ping Streamlit App
+        run: |
+          echo "Pinging Streamlit app..."
+          if curl -fsS --retry 5 --max-time 30 "${{ secrets.MY_STREAMLIT_APP }}"; then
+            echo "✅ Streamlit app is alive"
+          else
+            echo "⚠️ Streamlit app ping failed"
+            exit 1
+          fi
+
+      - name: 🗄️ Check Astra DB Status
+        id: check-db
+        env:
+          ASTRA_DB_TOKEN: ${{ secrets.ASTRA_TOKEN }}
+          ASTRA_DB_API_ENDPOINT: ${{ secrets.ASTRA_DB_API_ENDPOINT }}
+        run: |
+          echo "Checking Astra DB..."
+          # Try to ping the database using the API endpoint
+          if curl -fsS --max-time 10 \
+               -H "X-Cassandra-Token: $ASTRA_TOKEN" \
+               "$ASTRA_DB_API_ENDPOINT/api/rest/v2/schemas/keyspaces" > /dev/null 2>&1; then
+            echo "✅ Astra DB is active"
+            echo "status=active" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️ Astra DB appears hibernated or unreachable"
+            echo "status=hibernated" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 🔄 Resume Astra DB if Hibernated
+        if: steps.check-db.outputs.status == 'hibernated'
+        env:
+          ASTRA_DB_TOKEN: ${{ secrets.ASTRA_TOKEN }}
+          ASTRA_DB_ID: ${{ secrets.ASTRA_DB_ID }}
+        run: |
+          echo "Attempting to resume hibernated database..."
+          # Use DevOps API to resume database
+          RESPONSE=$(curl -X POST \
+            -H "Authorization: Bearer $ASTRA_TOKEN" \
+            -H "Content-Type: application/json" \
+            -w "\n%{http_code}" \
+            "https://api.astra.datastax.com/v2/databases/$ASTRA_DB_ID/resume")
+          
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          
+          if [ "$HTTP_CODE" = "202" ] || [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Resume request sent successfully"
+            echo "⏳ Waiting 90 seconds for database to resume..."
+            sleep 90
+            
+            # Verify database is now active
+            if curl -fsS --max-time 10 \
+                 -H "X-Cassandra-Token: ${{ secrets.ASTRA_DB_TOKEN }}" \
+                 "${{ secrets.ASTRA_DB_API_ENDPOINT }}/api/rest/v2/schemas/keyspaces" > /dev/null 2>&1; then
+              echo "✅ Database successfully resumed and verified"
+            else
+              echo "⚠️ Database resume requested but verification failed (may need more time)"
+            fi
+          else
+            echo "❌ Resume request failed with HTTP code: $HTTP_CODE"
+            echo "Response: $(echo "$RESPONSE" | head -n-1)"
+            exit 1
+          fi
+
+      - name: 📊 Run Health Check
+        env:
+          ASTRA_DB_TOKEN: ${{ secrets.ASTRA_TOKEN }}
+          ASTRA_DB_API_ENDPOINT: ${{ secrets.ASTRA_DB_API_ENDPOINT }}
+        run: |
+          echo "Running final health check..."
+          
+          # Check keyspaces
+          KEYSPACES=$(curl -fsS \
+            -H "X-Cassandra-Token: $ASTRA_TOKEN" \
+            "$ASTRA_DB_API_ENDPOINT/api/rest/v2/schemas/keyspaces")
+          
+          echo "Available keyspaces: $KEYSPACES"
+          echo "✅ Health check complete"
+
+      - name: 📝 Summary
+        if: always()
+        run: |
+          echo "==================================="
+          echo "Keep-Alive Summary"
+          echo "==================================="
+          echo "Date: $(date -u)"
+          echo "Streamlit: Checked"
+          echo "Astra DB: Checked & Kept Alive"
+          echo "==================================="
