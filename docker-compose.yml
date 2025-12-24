@@ -1,0 +1,35 @@
+
+version: '3.8'
+
+services:
+  crr-rag-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: crr-rag-streamlit
+    ports:
+      - "8501:8501"
+    environment:
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - ASTRA_DB_TOKEN=${ASTRA_DB_TOKEN}
+      - ASTRA_DB_API_ENDPOINT=${ASTRA_DB_API_ENDPOINT}
+      - ASTRA_DB_ID=${ASTRA_DB_ID}
+    env_file:
+      - .env
+    volumes:
+      # Mount source code for development (optional - comment out for production)
+      - ./st_crr.py:/app/st_crr.py
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - crr-network
+
+networks:
+  crr-network:
+    driver: bridge
