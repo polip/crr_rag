@@ -38,7 +38,7 @@ def load_rag_system():
      # Connect to Astra DB using DataAPIClient
     client = DataAPIClient(os.getenv("ASTRA_DB_TOKEN"))
     database = client.get_database(os.getenv("ASTRA_DB_API_ENDPOINT"))
-    collection = database.get_collection("legal_docling_chunks")
+    collection = database.get_collection("crr_docling_chunks")
     
     
     # Initialize LLM
