@@ -1,3 +1,5 @@
 .env
 legal_chunks_docling_20251118_095401.pkl
 legal_chunks_summary_20251118_095401.pkl
+DOCKER_README.md
+CHUNKING_ISSUE_ANALYSIS.md
