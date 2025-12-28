@@ -6,8 +6,7 @@ from astrapy import DataAPIClient
 from langchain_nvidia_ai_endpoints import NVIDIAEmbeddings
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnablePassthrough
-from langchain_core.output_parsers import StrOutputParser
+
 
 # Load environment variables
 load_dotenv()
