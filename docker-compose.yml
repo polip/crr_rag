@@ -5,8 +5,8 @@ services:
   crr-rag-app:
     build:
       context: .
-      dockerfile: Dockerfile
-    container_name: crr-rag-streamlit
+      dockerfile: Dockerfile.production
+    container_name: crr-rag-app
     ports:
       - "8501:8501"
     environment:
@@ -17,9 +17,9 @@ services:
       - ASTRA_DB_ID=${ASTRA_DB_ID}
     env_file:
       - .env
-    volumes:
-      # Mount source code for development (optional - comment out for production)
-      - ./st_crr.py:/app/st_crr.py
+    #volumes:
+      # Mount source code for development 
+      #- ./st_crr.py:/app/st_crr.py
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
