@@ -6,115 +6,80 @@ from astrapy import DataAPIClient
 from langchain_nvidia_ai_endpoints import NVIDIAEmbeddings
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
+from document_router import DocumentRouter
 
 
 # Load environment variables
 load_dotenv()
 
 st.set_page_config(
-    page_title="CRR RAG Assistant",
+    page_title="Multi-Document RAG Assistant",
     page_icon="⚖️",
     layout="wide"
 )
 
-st.title("⚖️ CRR RAG Assistant")
-st.subheader("Capital Requirements Regulation Analysis")
+st.title("⚖️ Multi-Document Legal RAG Assistant")
+st.subheader("Financial Regulations Analysis with Intelligent Document Routing")
 
-# Initialize chat history in session state
+# Initialize session state
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+if "document_mode" not in st.session_state:
+    st.session_state.document_mode = "auto"  # auto, all, or specific document ID
+
+if "selected_documents" not in st.session_state:
+    st.session_state.selected_documents = []
+
 @st.cache_resource
 def load_rag_system():
-    """Load the RAG system components"""
-    
-    # Initialize embeddings
-    embeddings = NVIDIAEmbeddings(
-        model="nvidia/nv-embedqa-e5-v5",
-        api_key=os.getenv("NVIDIA_API_KEY")
-    )
-    
-     # Connect to Astra DB using DataAPIClient
-    client = DataAPIClient(os.getenv("ASTRA_DB_TOKEN"))
-    database = client.get_database(os.getenv("ASTRA_DB_API_ENDPOINT"))
-    collection = database.get_collection("crr_docling_chunks")
-    
-    
-    # Initialize LLM
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
-        temperature=0.1,
-        google_api_key=os.getenv("GEMINI_API_KEY")
-    )
-    
-    # Create prompt
-    prompt = ChatPromptTemplate.from_messages([
-    ("system", """You are a specialized legal document assistant with expertise in financial regulations, particularly the Capital Requirements Regulation (CRR). 
-
-Your role is to:
-1. Provide accurate, precise answers based solely on the provided legal document context
-2. Always cite specific articles, sections, or provisions when referencing information
-3. Distinguish between mandatory requirements ("shall", "must") and optional provisions ("may", "should")
-4. Explain complex legal concepts in clear, professional language
-5. When uncertain, clearly state limitations and suggest consulting legal counsel
-
-Important guidelines:
-- Only use information from the provided context
-- Never speculate or provide general legal advice
-- Always reference specific article numbers when applicable
-- Maintain professional, formal tone appropriate for legal documentation"""),
-    
-    ("user", """Based on the following legal document excerpts, please answer the question:
-
-Context: {context}
-
-Question: {question}
-     
-
-Please provide a comprehensive answer with specific references to articles and provisions.""")
-])
-    
-    def retrieve_documents(query: str, k: int = 6):
-        """Retrieve relevant documents using vector search"""
-        query_embedding = embeddings.embed_query(query)
-        
-        results = collection.find(
-            sort={"$vector": query_embedding},
-            limit=k,
-            projection={"content": 1, "metadata": 1, "$vector": 1}
-        )
-        
-        docs = []
-        for doc in results:
-            docs.append({
-                "content": doc.get("content", ""),
-                "metadata": doc.get("metadata", {})
-            })
-        return docs    
-    def format_docs(docs):
-        return "\n\n---\n\n".join([
-            f"[{doc['metadata'].get('article_no', 'Unknown')}, Page {doc['metadata'].get('page', 'N/A')}]\n{doc['content']}"
-            for doc in docs
-        ])
-    
-    def rag_chain_invoke(question: str):
-        docs = retrieve_documents(question)
-        context = format_docs(docs)
-        
-        messages = prompt.format_messages(context=context, question=question)
-        response = llm.invoke(messages)
-        
-        return response.content, docs
-    
-    return rag_chain_invoke
+    """Load the RAG system with multi-document support"""
+    router = DocumentRouter()
+    return router
 
 # Load system
-with st.spinner("Loading CRR RAG system..."):
-    rag_chain = load_rag_system()
+with st.spinner("Loading Multi-Document RAG system..."):
+    router = load_rag_system()
 
-st.success("✅ CRR RAG system loaded successfully!")
+# Get available documents and stats
+doc_stats = router.get_document_stats()
+st.success(f"✅ RAG system loaded! {len(doc_stats)} document(s) available")
 
-# Sidebar with sample queries and clear button
+# Sidebar - Document Selection
+st.sidebar.header("📚 Document Selection")
+
+# Display available documents
+st.sidebar.markdown("**Available Documents:**")
+for doc_id, info in doc_stats.items():
+    st.sidebar.markdown(f"- **{info['name']}** ({info['chunk_count']} chunks)")
+
+st.sidebar.markdown("---")
+
+# Document mode selector
+document_mode = st.sidebar.radio(
+    "Query Mode:",
+    ["🤖 Auto-Route (AI selects)", "🌐 All Documents", "🎯 Specific Documents"],
+    index=0
+)
+
+# Update session state
+if document_mode == "🤖 Auto-Route (AI selects)":
+    st.session_state.document_mode = "auto"
+elif document_mode == "🌐 All Documents":
+    st.session_state.document_mode = "all"
+else:
+    st.session_state.document_mode = "specific"
+    # Show document selector
+    st.session_state.selected_documents = st.sidebar.multiselect(
+        "Select documents to query:",
+        options=list(doc_stats.keys()),
+        format_func=lambda x: doc_stats[x]['name'],
+        default=st.session_state.selected_documents if st.session_state.selected_documents else list(doc_stats.keys())[:1]
+    )
+
+st.sidebar.markdown("---")
+
+# Sample queries
 st.sidebar.header("📋 Sample Queries")
 sample_queries = [
     "What are the capital requirements for credit institutions?",
@@ -131,69 +96,112 @@ if st.sidebar.button("🗑️ Clear Chat History"):
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 💡 Tips")
+st.sidebar.markdown("- **Auto-Route**: AI automatically selects relevant documents")
+st.sidebar.markdown("- **All Documents**: Search across all documents")
+st.sidebar.markdown("- **Specific**: Choose which documents to query")
 st.sidebar.markdown("- Ask follow-up questions")
-st.sidebar.markdown("- Reference previous answers")
 st.sidebar.markdown("- Chat history is maintained")
 
 # Display chat history
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
-        
+
+        # Show document routing info if available
+        if "queried_documents" in message:
+            doc_names = [doc_stats[doc_id]['name'] for doc_id in message["queried_documents"] if doc_id in doc_stats]
+            if doc_names:
+                st.caption(f"📚 Queried: {', '.join(doc_names)}")
+
         # Show sources if available
         if "sources" in message and message["sources"]:
             with st.expander("📄 View Sources"):
                 for i, source in enumerate(message["sources"], 1):
-                    st.markdown(f"**{source['article']} (Page {source['page']})**")
+                    doc_name = source.get('document', 'Unknown Document')
+                    article = source.get('article', 'Unknown Article')
+                    page = source.get('page', 'N/A')
+                    st.markdown(f"**{doc_name}**")
+                    st.markdown(f"*{article} (Page {page})*")
                     st.text(source['content'][:300] + "...")
                     if i < len(message["sources"]):
                         st.markdown("---")
 
 # Function to process user query
 def process_query(user_query):
-    """Process a user query and generate response"""
+    """Process a user query and generate response with multi-document support"""
     # Add user message to chat history
     st.session_state.messages.append({"role": "user", "content": user_query})
-    
+
     # Display user message
     with st.chat_message("user"):
         st.markdown(user_query)
-    
+
     # Generate assistant response
     with st.chat_message("assistant"):
         with st.spinner("Analyzing legal documents..."):
             try:
-                # Get answer from RAG chain
-                answer, docs = rag_chain(user_query)
-                
+                # Determine which documents to query based on mode
+                if st.session_state.document_mode == "auto":
+                    # Use automatic routing
+                    answer, docs, queried_doc_ids = router.answer_with_routing(
+                        user_query,
+                        use_routing=True
+                    )
+                    routing_info = f"📚 Queried: {', '.join([doc_stats[doc_id]['name'] for doc_id in queried_doc_ids if doc_id in doc_stats])}"
+                    st.caption(routing_info)
+
+                elif st.session_state.document_mode == "all":
+                    # Query all documents
+                    answer, docs, queried_doc_ids = router.answer_with_routing(
+                        user_query,
+                        use_routing=False
+                    )
+                    st.caption("📚 Queried: All documents")
+
+                else:
+                    # Query specific documents
+                    if not st.session_state.selected_documents:
+                        st.warning("⚠️ Please select at least one document to query")
+                        return
+
+                    answer, docs, queried_doc_ids = router.answer_with_routing(
+                        user_query,
+                        specific_documents=st.session_state.selected_documents
+                    )
+                    routing_info = f"📚 Queried: {', '.join([doc_stats[doc_id]['name'] for doc_id in queried_doc_ids if doc_id in doc_stats])}"
+                    st.caption(routing_info)
+
                 # Display answer
                 st.markdown(answer)
-                
+
                 # Prepare sources
                 sources = [
                     {
+                        "document": doc['metadata'].get('document_name', 'Unknown Document'),
                         "article": doc['metadata'].get('article_no', 'Unknown Article'),
                         "page": doc['metadata'].get('page', 'N/A'),
                         "content": doc['content']
                     }
                     for doc in docs
                 ]
-                
+
                 # Show sources
                 with st.expander("📄 View Sources"):
                     for i, source in enumerate(sources, 1):
-                        st.markdown(f"**{source['article']} (Page {source['page']})**")
+                        st.markdown(f"**{source['document']}**")
+                        st.markdown(f"*{source['article']} (Page {source['page']})*")
                         st.text(source['content'][:300] + "...")
                         if i < len(sources):
                             st.markdown("---")
-                
+
                 # Add assistant response to chat history
                 st.session_state.messages.append({
                     "role": "assistant",
                     "content": answer,
-                    "sources": sources
+                    "sources": sources,
+                    "queried_documents": queried_doc_ids
                 })
-                
+
             except Exception as e:
                 error_msg = f"❌ Error: {str(e)}"
                 st.error(error_msg)

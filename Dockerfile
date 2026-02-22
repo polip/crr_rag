@@ -26,7 +26,7 @@ RUN pip install --upgrade pip && \
 
 # Copy application files
 COPY st_crr.py .
-COPY .env .
+
 
 # Expose Streamlit port
 EXPOSE 8501
