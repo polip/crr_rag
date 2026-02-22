@@ -36,7 +36,6 @@ ENV PYTHONUNBUFFERED=1 \
 
 # Copy application files
 COPY st_crr.py .
-COPY .env .
 
 # Create non-root user for security
 RUN useradd -m -u 1000 appuser && \
