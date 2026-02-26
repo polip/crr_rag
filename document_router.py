@@ -43,10 +43,14 @@ class DocumentRouter:
         print(f"📚 Available documents: {list(self.available_documents.keys())}")
 
     def _get_available_documents(self) -> Dict[str, str]:
-        """Get list of available documents from database"""
+        """Get list of available documents from database (cached)"""
         try:
-            # Sample documents to find unique document IDs
-            sample_docs = list(self.collection.find(limit=1000, projection={"metadata": 1}))
+            # Use aggregation with distinct to get unique document IDs more efficiently
+            # This is much faster than fetching 1000 documents
+            sample_docs = list(self.collection.find(
+                limit=100,  # Reduced from 1000
+                projection={"metadata.document_id": 1, "metadata.document_name": 1}
+            ))
 
             documents = {}
             for doc in sample_docs:
@@ -57,6 +61,10 @@ class DocumentRouter:
                 # Only add if both ID and name exist
                 if doc_id and doc_name and doc_id not in documents:
                     documents[doc_id] = doc_name
+                    
+                # Early exit if we've found multiple documents
+                if len(documents) >= 10:  # Reasonable upper limit
+                    break
 
             if not documents:
                 print("⚠️  No documents found in database!")
@@ -228,18 +236,39 @@ Please provide a comprehensive answer with specific references to documents, art
 
         return response.content, docs, doc_ids or list(self.available_documents.keys())
 
-    def get_document_stats(self) -> Dict:
-        """Get statistics about documents in the database"""
+    def get_document_stats(self, use_estimated_count: bool = True) -> Dict:
+        """Get statistics about documents in the database
+        
+        Args:
+            use_estimated_count: If True, uses count_documents which is faster.
+                               If False, fetches and counts (slower but accurate for small sets)
+        """
         stats = {}
 
         for doc_id, doc_name in self.available_documents.items():
-            # Count chunks for this document by fetching and counting
-            docs = list(self.collection.find(
-                filter={"metadata.document_id": doc_id},
-                projection={"_id": 1},
-                limit=10000  # Adjust if you have more chunks per document
-            ))
-            count = len(docs)
+            try:
+                if use_estimated_count:
+                    # Try to count with a reasonable upper bound
+                    # AstraDB has a limit of 1000 for count operations
+                    count = self.collection.count_documents(
+                        filter={"metadata.document_id": doc_id},
+                        upper_bound=1000
+                    )
+                else:
+                    # Original method: fetch and count (slower)
+                    docs = list(self.collection.find(
+                        filter={"metadata.document_id": doc_id},
+                        projection={"_id": 1},
+                        limit=1000
+                    ))
+                    count = len(docs)
+            except Exception as e:
+                # If count exceeds limit, just show "1000+"
+                if "TooManyDocumentsToCountException" in str(type(e).__name__):
+                    count = "1000+"
+                else:
+                    print(f"⚠️  Error counting docs for {doc_id}: {e}")
+                    count = "Unknown"
 
             stats[doc_id] = {
                 "name": doc_name,

@@ -37,12 +37,17 @@ def load_rag_system():
     router = DocumentRouter()
     return router
 
+@st.cache_data(ttl=3600)  # Cache for 1 hour
+def get_document_statistics(_router):
+    """Get document statistics - cached to avoid repeated DB queries"""
+    return _router.get_document_stats(use_estimated_count=True)
+
 # Load system
 with st.spinner("Loading Multi-Document RAG system..."):
     router = load_rag_system()
 
-# Get available documents and stats
-doc_stats = router.get_document_stats()
+# Get available documents and stats (cached)
+doc_stats = get_document_statistics(router)
 st.success(f"✅ RAG system loaded! {len(doc_stats)} document(s) available")
 
 # Sidebar - Document Selection
