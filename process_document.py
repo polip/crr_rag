@@ -10,7 +10,8 @@ from datetime import datetime
 from typing import List, Dict
 from dotenv import load_dotenv
 
-from docling.document_converter import DocumentConverter
+from docling.document_converter import DocumentConverter, PdfFormatOption
+from docling.datamodel.pipeline_options import PdfPipelineOptions
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_astradb import AstraDBVectorStore
@@ -25,8 +26,10 @@ class DocumentProcessor:
 
     def __init__(self, max_tokens: int = 512):
         self.max_tokens = max_tokens
+        # Use safety threshold - only accept chunks well below the limit
+        self.safe_token_limit = int(max_tokens * 0.85)  # 435 tokens - safety margin
         self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1800,  # ~450 tokens (safe margin)
+            chunk_size=1600,  # ~400 tokens with conservative estimate
             chunk_overlap=200,
             separators=["\n\n", "\n", ". ", " ", ""],
             keep_separator=True,
@@ -104,7 +107,7 @@ class DocumentProcessor:
 
     def split_large_chunks(self, chunks: List[Document]) -> List[Document]:
         """Split chunks that exceed token limit and re-detect article numbers"""
-        print(f"🔧 Checking chunks for {self.max_tokens} token limit...")
+        print(f"🔧 Checking chunks for {self.max_tokens} token limit (using safety threshold: {self.safe_token_limit})...")
 
         valid_chunks = []
         oversized_count = 0
@@ -113,7 +116,8 @@ class DocumentProcessor:
         for i, chunk in enumerate(chunks):
             estimated_tokens = self.estimate_tokens(chunk.page_content)
 
-            if estimated_tokens <= self.max_tokens:
+            # Use safety threshold to ensure chunks are well below limit
+            if estimated_tokens <= self.safe_token_limit:
                 valid_chunks.append(chunk)
             else:
                 oversized_count += 1
@@ -164,8 +168,18 @@ class DocumentProcessor:
         print(f"{'='*60}\n")
 
         # Convert PDF with Docling
-        print("🔄 Converting PDF with Docling...")
-        converter = DocumentConverter()
+        print("🔄 Converting PDF with Docling (OCR disabled)...")
+        
+        # Configure pipeline to disable OCR
+        pipeline_options = PdfPipelineOptions()
+        pipeline_options.do_ocr = False
+        
+        converter = DocumentConverter(
+            format_options={
+                "pdf": PdfFormatOption(pipeline_options=pipeline_options)
+            }
+        )
+        
         result = converter.convert(pdf_path)
         docling_doc = result.document
         print(f"✅ Document has {len(docling_doc.pages)} pages")
@@ -181,11 +195,24 @@ class DocumentProcessor:
     def save_to_pickle(self, chunks: List[Document], document_id: str):
         """Save chunks to pickle file"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        pickle_filename = f"chunks_{document_id}_{timestamp}.pkl"
+        pickle_filename = f"pickle_files/chunks_{document_id}_{timestamp}.pkl"
+
+        # Ensure pickle_files directory exists
+        os.makedirs("pickle_files", exist_ok=True)
 
         print(f"\n💾 Saving {len(chunks)} chunks to {pickle_filename}...")
+        
+        # Create clean Document objects without any non-serializable references
+        clean_chunks = [
+            Document(
+                page_content=chunk.page_content,
+                metadata=chunk.metadata.copy()
+            )
+            for chunk in chunks
+        ]
+        
         with open(pickle_filename, 'wb') as f:
-            pickle.dump(chunks, f)
+            pickle.dump(clean_chunks, f)
 
         print(f"✅ Chunks saved!")
         return pickle_filename

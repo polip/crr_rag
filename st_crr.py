@@ -138,7 +138,7 @@ def process_query(user_query):
 
     # Generate assistant response
     with st.chat_message("assistant"):
-        with st.spinner("Analyzing legal documents..."):
+        with st.spinner("Analyzing EU legal documents..."):
             try:
                 # Determine which documents to query based on mode
                 if st.session_state.document_mode == "auto":

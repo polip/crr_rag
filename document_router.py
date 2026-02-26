@@ -28,7 +28,8 @@ class DocumentRouter:
         # Connect to Astra DB
         client = DataAPIClient(os.getenv("ASTRA_DB_TOKEN"))
         database = client.get_database(os.getenv("ASTRA_DB_API_ENDPOINT"))
-        self.collection = database.get_collection("crr_docling_chunks")
+        self.collection = database.get_collection(os.getenv("ASTRA_DB_COLLECTION_NAME"))  
+          
 
         # Initialize LLM for routing decisions
         self.llm = ChatGoogleGenerativeAI(
@@ -50,16 +51,20 @@ class DocumentRouter:
             documents = {}
             for doc in sample_docs:
                 metadata = doc.get("metadata", {})
-                doc_id = metadata.get("document_id", "CRR")
-                doc_name = metadata.get("document_name", "Capital Requirements Regulation")
+                doc_id = metadata.get("document_id")
+                doc_name = metadata.get("document_name")
 
-                if doc_id not in documents:
+                # Only add if both ID and name exist
+                if doc_id and doc_name and doc_id not in documents:
                     documents[doc_id] = doc_name
 
+            if not documents:
+                print("⚠️  No documents found in database!")
+                
             return documents
         except Exception as e:
             print(f"⚠️  Could not fetch documents: {e}")
-            return {"CRR": "Capital Requirements Regulation"}
+            return {}
 
     def route_query(self, question: str) -> List[str]:
         """
@@ -228,10 +233,13 @@ Please provide a comprehensive answer with specific references to documents, art
         stats = {}
 
         for doc_id, doc_name in self.available_documents.items():
-            # Count chunks for this document
-            count = self.collection.count_documents(
-                filter={"metadata.document_id": doc_id}
-            )
+            # Count chunks for this document by fetching and counting
+            docs = list(self.collection.find(
+                filter={"metadata.document_id": doc_id},
+                projection={"_id": 1},
+                limit=10000  # Adjust if you have more chunks per document
+            ))
+            count = len(docs)
 
             stats[doc_id] = {
                 "name": doc_name,

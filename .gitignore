@@ -1,5 +1,49 @@
+# Environment variables
 .env
-legal_chunks_docling_20251118_095401.pkl
-legal_chunks_summary_20251118_095401.pkl
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg-info/
+dist/
+build/
+
+# Virtual environment
+.venv/
+venv/
+
+# Data files
+pdfs/
+pickle_files/
+*.pkl
+*.db
+*.sqlite
+
+# Logs
+*.log
+
+# IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Temporary files
+*.tmp
+
+# Project-specific
 DOCKER_README.md
 CHUNKING_ISSUE_ANALYSIS.md
+
