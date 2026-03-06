@@ -10,8 +10,7 @@ from datetime import datetime
 from typing import List, Dict
 from dotenv import load_dotenv
 
-from docling.document_converter import DocumentConverter, PdfFormatOption
-from docling.datamodel.pipeline_options import PdfPipelineOptions
+from pypdf import PdfReader
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_astradb import AstraDBVectorStore
@@ -42,61 +41,53 @@ class DocumentProcessor:
         """Rough estimation: 1 token ≈ 4 characters"""
         return len(text) / 4
 
-    def extract_articles_from_docling(self, docling_doc, document_id: str, document_name: str) -> List[Document]:
-        """Extract articles from Docling document object"""
+    def extract_articles_from_pdf(self, pdf_path: str, document_id: str, document_name: str) -> List[Document]:
+        """Extract articles from PDF using pypdf"""
         chunks = []
         current = None
 
         print(f"📄 Extracting articles from {document_name}...")
 
-        for item, level in docling_doc.iterate_items():
-            # Get text content from the item
-            txt = ""
-            if hasattr(item, 'text') and item.text:
-                txt = item.text.strip()
-            elif hasattr(item, 'caption') and item.caption:
-                txt = item.caption.strip()
-            elif hasattr(item, 'title') and item.title:
-                txt = item.title.strip()
+        # Open PDF with pypdf
+        reader = PdfReader(pdf_path)
+        
+        # Process each page
+        for page_num, page in enumerate(reader.pages, start=1):
+            text = page.extract_text()
+            
+            # Split into lines and process
+            for line in text.split('\n'):
+                line = line.strip()
+                if not line:
+                    continue
 
-            if not txt:
-                continue
+                # Check if this is an article heading
+                article_match = self.article_pattern.match(line)
 
-            # Check if this is an article heading
-            article_match = self.article_pattern.match(txt)
+                if article_match:
+                    article_type = article_match.group(1)  # "Članak" or "Article"
+                    article_num = article_match.group(2)   # The number
 
-            if article_match:
-                article_type = article_match.group(1)  # "Članak" or "Article"
-                article_num = article_match.group(2)   # The number
+                    # Save previous chunk before starting a new one
+                    if current:
+                        chunks.append(Document(**current))
 
-                # Save previous chunk before starting a new one
-                if current:
-                    chunks.append(Document(**current))
-
-                # Get page number
-                try:
-                    page_num = item.prov[0].page_no if hasattr(item, 'prov') and item.prov else 1
-                except:
-                    page_num = 1
-
-                # Start new article chunk
-                current = {
-                    "page_content": txt + "\n",
-                    "metadata": {
-                        "type": "article",
-                        "article_no": f"{article_type} {article_num}",
-                        "article_number": int(article_num),
-                        "page": page_num,
-                        "item_type": type(item).__name__,
-                        "label": getattr(item, 'label', 'unknown'),
-                        "language": "hr" if article_type == "Članak" else "en",
-                        "document_id": document_id,
-                        "document_name": document_name,
+                    # Start new article chunk
+                    current = {
+                        "page_content": line + "\n",
+                        "metadata": {
+                            "type": "article",
+                            "article_no": f"{article_type} {article_num}",
+                            "article_number": int(article_num),
+                            "page": page_num,
+                            "language": "hr" if article_type == "Članak" else "en",
+                            "document_id": document_id,
+                            "document_name": document_name,
+                        }
                     }
-                }
-            elif current:
-                # Append content to current article
-                current["page_content"] += txt + "\n"
+                elif current:
+                    # Append content to current article
+                    current["page_content"] += line + "\n"
 
         # Don't forget the last chunk
         if current:
@@ -167,25 +158,9 @@ class DocumentProcessor:
         print(f"📝 Document Name: {document_name}")
         print(f"{'='*60}\n")
 
-        # Convert PDF with Docling
-        print("🔄 Converting PDF with Docling (OCR disabled)...")
-        
-        # Configure pipeline to disable OCR
-        pipeline_options = PdfPipelineOptions()
-        pipeline_options.do_ocr = False
-        
-        converter = DocumentConverter(
-            format_options={
-                "pdf": PdfFormatOption(pipeline_options=pipeline_options)
-            }
-        )
-        
-        result = converter.convert(pdf_path)
-        docling_doc = result.document
-        print(f"✅ Document has {len(docling_doc.pages)} pages")
-
-        # Extract articles
-        chunks = self.extract_articles_from_docling(docling_doc, document_id, document_name)
+        # Extract articles directly from PDF
+        print("🔄 Extracting text from PDF with pypdf...")
+        chunks = self.extract_articles_from_pdf(pdf_path, document_id, document_name)
 
         # Split large chunks
         valid_chunks = self.split_large_chunks(chunks)
