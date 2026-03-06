@@ -243,10 +243,18 @@ def main():
     """Main function to process a new document"""
     import sys
 
+    # Check for --pickle-only flag
+    pickle_only = "--pickle-only" in sys.argv
+    if pickle_only:
+        sys.argv.remove("--pickle-only")
+
     if len(sys.argv) < 4:
-        print("Usage: python process_document.py <pdf_path> <document_id> <document_name>")
-        print("\nExample:")
+        print("Usage: python process_document.py <pdf_path> <document_id> <document_name> [--pickle-only]")
+        print("\nOptions:")
+        print("  --pickle-only    Process document and save to pickle file only (skip vector DB upload)")
+        print("\nExamples:")
         print("  python process_document.py new_regulation.pdf MiFID_II 'MiFID II Regulation'")
+        print("  python process_document.py new_regulation.pdf MiFID_II 'MiFID II Regulation' --pickle-only")
         sys.exit(1)
 
     pdf_path = sys.argv[1]
@@ -264,19 +272,31 @@ def main():
     # Save to pickle
     pickle_file = processor.save_to_pickle(chunks, document_id)
 
-    # Add to vector store
-    store_manager = VectorStoreManager()
-    successfully_added, failed_chunks = store_manager.add_chunks(chunks)
+    # Add to vector store (unless --pickle-only flag is used)
+    if pickle_only:
+        print(f"\n{'='*60}")
+        print(f"✅ PROCESSING COMPLETE (PICKLE ONLY)")
+        print(f"{'='*60}")
+        print(f"📄 Document: {document_name}")
+        print(f"🆔 ID: {document_id}")
+        print(f"📦 Chunks created: {len(chunks)}")
+        print(f"💾 Backup saved to: {pickle_file}")
+        print(f"{'='*60}")
+        print(f"\n💡 To upload to vector database later, use upload_from_pickle.py")
+        print(f"{'='*60}\n")
+    else:
+        store_manager = VectorStoreManager()
+        successfully_added, failed_chunks = store_manager.add_chunks(chunks)
 
-    print(f"\n{'='*60}")
-    print(f"✅ PROCESSING COMPLETE")
-    print(f"{'='*60}")
-    print(f"📄 Document: {document_name}")
-    print(f"🆔 ID: {document_id}")
-    print(f"📦 Chunks created: {len(chunks)}")
-    print(f"✅ Successfully stored: {successfully_added}")
-    print(f"💾 Backup saved to: {pickle_file}")
-    print(f"{'='*60}\n")
+        print(f"\n{'='*60}")
+        print(f"✅ PROCESSING COMPLETE")
+        print(f"{'='*60}")
+        print(f"📄 Document: {document_name}")
+        print(f"🆔 ID: {document_id}")
+        print(f"📦 Chunks created: {len(chunks)}")
+        print(f"✅ Successfully stored: {successfully_added}")
+        print(f"💾 Backup saved to: {pickle_file}")
+        print(f"{'='*60}\n")
 
 
 if __name__ == "__main__":

@@ -8,10 +8,11 @@ A Retrieval-Augmented Generation (RAG) system for querying financial regulation 
 - **Intelligent Document Routing**: AI automatically selects relevant documents for each query
 - **Article-Level Chunking**: Extracts and processes documents by article boundaries
 - **Smart Token Management**: Automatic chunk splitting with 435-token safety threshold
+- **Flexible Processing**: Process to pickle only or directly upload to vector database
 - **Vector Storage**: Powered by AstraDB for efficient similarity search
 - **Modern UI**: Streamlit-based chat interface
 - **Docker Support**: Easy deployment with Docker Compose
-- **Pickle Backup**: Processed chunks saved for backup
+- **Pickle Backup**: Processed chunks saved for backup and re-upload
 
 ## 🏗️ Architecture
 
@@ -99,11 +100,14 @@ pip install -r requirements.txt
 Process your PDF documents:
 
 ```bash
-# Process CRR (Capital Requirements Regulation)
+# Process and upload directly to AstraDB
 uv run process_document.py pdfs/CELEX_02013R0575-20250629_EN_TXT.pdf CRR 'CRR'
 
-# Process CRD (Capital Requirements Directive)
-uv run process_document.py pdfs/CELEX_02013L0036-20260111_EN_TXT.pdf CRD 'CRD'
+# Or process to pickle file only (without database upload)
+uv run process_document.py pdfs/CELEX_02013L0036-20260111_EN_TXT.pdf CRD 'CRD' --pickle-only
+
+# Later, upload from pickle file
+uv run upload_from_pickle.py pickle_files/chunks_CRD_20260306_143022.pkl
 ```
 
 ### 5. Run the Application
@@ -122,6 +126,35 @@ Access at: `http://localhost:8501`
 
 ## 📖 Usage Guide
 
+### Common Workflows
+
+**Workflow 1: Direct Upload (Default)**
+```bash
+# Process and upload in one step
+uv run process_document.py pdfs/regulation.pdf DOC_ID 'Document Name'
+```
+Use when: You have a stable database connection and want immediate availability.
+
+**Workflow 2: Pickle-First (Safer)**
+```bash
+# Step 1: Process to pickle only
+uv run process_document.py pdfs/regulation.pdf DOC_ID 'Document Name' --pickle-only
+
+# Step 2: Review pickle file if needed
+# ...
+
+# Step 3: Upload when ready
+uv run upload_from_pickle.py pickle_files/chunks_DOC_ID_20260306_143022.pkl
+```
+Use when: Processing large documents, testing chunking strategies, or working offline.
+
+**Workflow 3: Re-upload from Backup**
+```bash
+# Upload existing pickle file (e.g., after database reset)
+uv run upload_from_pickle.py pickle_files/chunks_CRR_20260306_143022.pkl
+```
+Use when: Recovering from database issues or migrating to a new collection.
+
 ### Processing Documents
 
 The `process_document.py` script:
@@ -132,12 +165,19 @@ The `process_document.py` script:
 - Saves backup to pickle files
 
 ```bash
-uv run process_document.py <pdf_path> <document_id> <document_name>
+uv run process_document.py <pdf_path> <document_id> <document_name> [--pickle-only]
 ```
 
-**Example:**
+**Options:**
+- `--pickle-only`: Process document and save to pickle file only (skip vector DB upload)
+
+**Examples:**
 ```bash
+# Process and upload to vector database
 uv run process_document.py pdfs/regulation.pdf MiFID_II 'MiFID II Regulation'
+
+# Process to pickle only (no database upload)
+uv run process_document.py pdfs/regulation.pdf MiFID_II 'MiFID II Regulation' --pickle-only
 ```
 
 **What happens:**
@@ -145,8 +185,35 @@ uv run process_document.py pdfs/regulation.pdf MiFID_II 'MiFID II Regulation'
 2. Articles identified by regex pattern (Article/Članak + number)
 3. Text grouped by article with metadata
 4. Oversized chunks automatically split (safety threshold: 435 tokens)
-5. Chunks uploaded to AstraDB in batches
+5. Chunks uploaded to AstraDB in batches (unless `--pickle-only` is used)
 6. Backup saved to `pickle_files/chunks_{document_id}_{timestamp}.pkl`
+
+### Uploading from Pickle Files
+
+If you processed documents with `--pickle-only`, or want to re-upload existing chunks:
+
+```bash
+uv run upload_from_pickle.py <pickle_file_path> [--skip-validation]
+```
+
+**Options:**
+- `--skip-validation`: Skip token validation and upload chunks as-is
+
+**Examples:**
+```bash
+# Upload with automatic validation and chunk splitting
+uv run upload_from_pickle.py pickle_files/chunks_CRR_20260306_143022.pkl
+
+# Upload without validation (faster, but may fail on oversized chunks)
+uv run upload_from_pickle.py pickle_files/chunks_CRR_20260306_143022.pkl --skip-validation
+```
+
+**What happens:**
+1. Loads chunks from pickle file
+2. Validates each chunk against 512 token limit (unless `--skip-validation` is used)
+3. Automatically splits any oversized chunks
+4. Uploads to AstraDB in batches of 25
+5. Reports success/failure statistics
 
 ### Check Collection
 
@@ -205,6 +272,7 @@ crr_rag/
 ├── st_crr.py                    # Streamlit UI application
 ├── document_router.py           # Intelligent document routing logic
 ├── process_document.py          # PDF processing & upload to AstraDB
+├── upload_from_pickle.py        # Upload chunks from pickle files
 ├── check_collection.py          # View database collection stats
 ├── main.py                      # Empty main entry point
 ├── requirements.txt             # Python dependencies (pip)
@@ -242,6 +310,8 @@ The AI-powered router:
 ### Verify Processing
 
 After processing a document, check the output:
+
+**With database upload (default):**
 ```
 ✅ Extracted {n} articles
 🔧 Checking chunks for 512 token limit (using safety threshold: 435)
@@ -253,6 +323,15 @@ After processing a document, check the output:
 📚 Adding {total} chunks to Astra DB...
 ✅ Successfully added: {n} chunks
 💾 Backup saved to: pickle_files/chunks_{id}_{timestamp}.pkl
+```
+
+**With --pickle-only:**
+```
+✅ Extracted {n} articles
+🔧 Checking chunks for 512 token limit (using safety threshold: 435)
+✅ Processed {n} chunks
+💾 Backup saved to: pickle_files/chunks_{id}_{timestamp}.pkl
+💡 To upload to vector database later, use upload_from_pickle.py
 ```
 
 ### Database Check
@@ -268,8 +347,19 @@ uv run check_collection.py
 
 If batches fail with "Input length exceeds maximum allowed token size 512":
 - The safety threshold should prevent this, but if it occurs:
+- Use `--pickle-only` to process first, then review chunks
+- Upload with validation enabled: `uv run upload_from_pickle.py <pickle_file>`
 - Check your chunk size settings in `process_document.py`
 - Verify the `safe_token_limit` is set to `int(max_tokens * 0.85)`
+
+**Recommended approach:**
+```bash
+# Process to pickle first (safer for large documents)
+uv run process_document.py pdfs/document.pdf DOC_ID 'Name' --pickle-only
+
+# Upload with automatic validation and splitting
+uv run upload_from_pickle.py pickle_files/chunks_DOC_ID_timestamp.pkl
+```
 
 ### Docker Build Issues
 
@@ -312,7 +402,8 @@ If pypdf fails to extract text:
 
 | Script | Purpose |
 |--------|---------|
-| `process_document.py` | Process PDF and upload to AstraDB |
+| `process_document.py` | Process PDF and upload to AstraDB (or pickle only) |
+| `upload_from_pickle.py` | Upload chunks from pickle files to AstraDB |
 | `check_collection.py` | View documents in database |
 | `st_crr.py` | Run Streamlit web interface |
 | `document_router.py` | Document routing logic (imported) |
@@ -325,4 +416,4 @@ For issues or questions, check existing documentation:
 
 ---
 
-Built with using LangChain, AstraDB, pypdf, and Google Gemini
+Built with ❤️ using LangChain, AstraDB, pypdf, and Google Gemini
