@@ -416,4 +416,4 @@ For issues or questions, check existing documentation:
 
 ---
 
-Built with ❤️ using LangChain, AstraDB, pypdf, and Google Gemini
+Built with using LangChain, AstraDB, pypdf, and Google Gemini
