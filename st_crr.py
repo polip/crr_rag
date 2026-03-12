@@ -18,8 +18,8 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("⚖️ Multi-Document Legal RAG Assistant")
-st.subheader("Financial Regulations Analysis with Intelligent Document Routing")
+st.title("CRR and CRD RAG Assistant")
+st.subheader("Financial EU Regulations Analysis with Intelligent Document Routing")
 
 # Initialize session state
 if "messages" not in st.session_state:
