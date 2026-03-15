@@ -47,3 +47,10 @@ htmlcov/
 DOCKER_README.md
 CHUNKING_ISSUE_ANALYSIS.md
 
+# Secrets 
+github-actions-key.json
+GITHUB_ACTIONS_SETUP.md
+*.sh
+
+DOCKER_README.md
+

@@ -61,31 +61,10 @@ Edit `docker-compose.yml` and comment out the volumes section:
     #   - ./st_crr.py:/app/st_crr.py
 ```
 
-### Push to Docker Hub
-
-```bash
-# Tag the image
-docker tag crr-rag-app yourusername/crr-rag-app:latest
-
-# Push to Docker Hub
-docker push yourusername/crr-rag-app:latest
-```
 
 ### Deploy to Cloud
 
-#### Render.com
-1. Create a new Web Service
-2. Connect your GitHub repository
-3. Set Docker as the environment
-4. Add environment variables
-5. Deploy!
 
-#### Railway.app
-```bash
-railway login
-railway init
-railway up
-```
 
 #### Google Cloud Run
 ```bash
