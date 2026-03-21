@@ -75,7 +75,7 @@ jobs:
             --min-instances 0 \
             --max-instances 10 \
             --timeout 300 \
-            --startup-cpu-boost \
+            --cpu-boost \
             --set-env-vars NVIDIA_API_KEY=${{ secrets.NVIDIA_API_KEY }},GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},GEMINI_MODEL_NAME=${{ secrets.GEMINI_MODEL_NAME }},ASTRA_DB_TOKEN=${{ secrets.ASTRA_DB_TOKEN }},ASTRA_DB_API_ENDPOINT=${{ secrets.ASTRA_DB_API_ENDPOINT }},ASTRA_DB_COLLECTION_NAME=${{ secrets.ASTRA_DB_COLLECTION_NAME }} \
             --quiet
       
