@@ -19,17 +19,28 @@ class DocumentRouter:
     """Routes queries to appropriate documents and combines results"""
 
     def __init__(self):
+        # Verify required environment variables
+        required_vars = ["NVIDIA_API_KEY", "ASTRA_DB_TOKEN", "ASTRA_DB_API_ENDPOINT", 
+                        "ASTRA_DB_COLLECTION_NAME", "GEMINI_API_KEY"]
+        missing_vars = [var for var in required_vars if not os.getenv(var)]
+        if missing_vars:
+            raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
+        
         # Initialize embeddings
         self.embeddings = NVIDIAEmbeddings(
             model="nvidia/nv-embedqa-e5-v5",
             api_key=os.getenv("NVIDIA_API_KEY")
         )
 
-        # Connect to Astra DB
-        client = DataAPIClient(os.getenv("ASTRA_DB_TOKEN"))
-        database = client.get_database(os.getenv("ASTRA_DB_API_ENDPOINT"))
-        self.collection = database.get_collection(os.getenv("ASTRA_DB_COLLECTION_NAME"))  
-          
+        # Connect to Astra DB with timeout
+        try:
+            client = DataAPIClient(os.getenv("ASTRA_DB_TOKEN"))
+            database = client.get_database(os.getenv("ASTRA_DB_API_ENDPOINT"))
+            self.collection = database.get_collection(os.getenv("ASTRA_DB_COLLECTION_NAME"))
+            print("✅ Connected to AstraDB")
+        except Exception as e:
+            print(f"❌ Failed to connect to AstraDB: {e}")
+            raise
 
         # Initialize LLM for routing decisions
         self.llm = ChatGoogleGenerativeAI(
@@ -38,7 +49,8 @@ class DocumentRouter:
             google_api_key=os.getenv("GEMINI_API_KEY")
         )
 
-        # Cache available documents
+        # Cache available documents (with timeout protection)
+        print("🔄 Fetching available documents...")
         self.available_documents = self._get_available_documents()
         print(f"📚 Available documents: {list(self.available_documents.keys())}")
 
@@ -68,10 +80,16 @@ class DocumentRouter:
 
             if not documents:
                 print("⚠️  No documents found in database!")
+                # Return empty dict but don't crash - allows app to start
                 
             return documents
         except Exception as e:
+            # Log detailed error for debugging
+            import traceback
             print(f"⚠️  Could not fetch documents: {e}")
+            print(f"Error details: {traceback.format_exc()}")
+            # Return empty dict to allow app initialization to continue
+            # The app can still function, just without document routing
             return {}
 
     def route_query(self, question: str) -> List[str]:

@@ -34,13 +34,21 @@ if "selected_documents" not in st.session_state:
 @st.cache_resource
 def load_rag_system():
     """Load the RAG system with multi-document support"""
-    router = DocumentRouter()
-    return router
+    try:
+        router = DocumentRouter()
+        return router
+    except Exception as e:
+        st.error(f"❌ Failed to initialize RAG system: {e}")
+        st.stop()
 
 @st.cache_data(ttl=3600)  # Cache for 1 hour
 def get_document_statistics(_router):
     """Get document statistics - cached to avoid repeated DB queries"""
-    return _router.get_document_stats(use_estimated_count=True)
+    try:
+        return _router.get_document_stats(use_estimated_count=True)
+    except Exception as e:
+        st.warning(f"⚠️ Could not fetch document statistics: {e}")
+        return {}
 
 # Load system
 with st.spinner("Loading Multi-Document RAG system..."):
@@ -48,7 +56,11 @@ with st.spinner("Loading Multi-Document RAG system..."):
 
 # Get available documents and stats (cached)
 doc_stats = get_document_statistics(router)
-st.success(f"✅ RAG system loaded! {len(doc_stats)} document(s) available")
+
+if doc_stats:
+    st.success(f"✅ RAG system loaded! {len(doc_stats)} document(s) available")
+else:
+    st.warning("⚠️ RAG system loaded but no documents found in database. Please check your data!")
 
 # Sidebar - Document Selection
 st.sidebar.header("📚 Document Selection")
