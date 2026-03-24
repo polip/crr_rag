@@ -49,8 +49,8 @@ jobs:
           
           if [ "$HTTP_CODE" = "202" ] || [ "$HTTP_CODE" = "200" ]; then
             echo "✅ Resume request sent successfully"
-            echo "⏳ Waiting 90 seconds for database to resume..."
-            sleep 90
+            echo "⏳ Waiting 180 seconds for database to resume..."
+            sleep 180
             
             # Verify database is now active
             if curl -fsS --max-time 10 \
