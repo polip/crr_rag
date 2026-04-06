@@ -11,7 +11,7 @@ Multi-Document Legal RAG (Retrieval-Augmented Generation) system for querying fi
 **Three-layer architecture:**
 
 1. **Document Processing Layer** ([process_document.py](process_document.py))
-   - Extracts articles from PDF regulation documents using pypdf
+   - Extracts articles from PDF regulation documents using PyMuPDF (fitz)
    - Uses regex pattern matching for article boundaries: `^(Članak|Article)\s+(\d+)`
    - Implements automatic chunk splitting with 435 token safety threshold (85% of 512 token limit)
    - Saves backup to pickle files before uploading to vector store
@@ -79,6 +79,18 @@ uv run upload_from_pickle.py <pickle_file_path>
 uv run check_collection.py
 ```
 
+**Delete collection data:**
+```bash
+# List all document IDs in collection
+uv run delete_collection_data.py list
+
+# Delete specific document by ID
+uv run delete_collection_data.py CRR
+
+# Delete ALL data (requires confirmation)
+uv run delete_collection_data.py all
+```
+
 ### Testing Document Router
 ```bash
 uv run document_router.py
@@ -132,6 +144,7 @@ Each chunk includes:
 ├── process_document.py       # PDF processing & chunking pipeline
 ├── upload_from_pickle.py     # Pickle-to-database upload utility
 ├── check_collection.py       # Database statistics viewer
+├── delete_collection_data.py # Delete documents from collection
 ├── list_collections.py       # List all collections in database
 ├── requirements.txt          # Pip dependencies
 ├── pyproject.toml           # UV project config

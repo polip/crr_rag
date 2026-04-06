@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import List, Dict
 from dotenv import load_dotenv
 
-from pypdf import PdfReader
+import fitz  # PyMuPDF
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_astradb import AstraDBVectorStore
@@ -29,7 +29,7 @@ class DocumentProcessor:
         self.safe_token_limit = int(max_tokens * 0.85)  # 435 tokens - safety margin
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1600,  # ~400 tokens with conservative estimate
-            chunk_overlap=200,
+            chunk_overlap=100,
             separators=["\n\n", "\n", ". ", " ", ""],
             keep_separator=True,
             length_function=len,
@@ -42,18 +42,19 @@ class DocumentProcessor:
         return len(text) / 4
 
     def extract_articles_from_pdf(self, pdf_path: str, document_id: str, document_name: str) -> List[Document]:
-        """Extract articles from PDF using pypdf"""
+        """Extract articles from PDF using PyMuPDF"""
         chunks = []
         current = None
 
         print(f"📄 Extracting articles from {document_name}...")
 
-        # Open PDF with pypdf
-        reader = PdfReader(pdf_path)
+        # Open PDF with PyMuPDF
+        doc = fitz.open(pdf_path)
         
         # Process each page
-        for page_num, page in enumerate(reader.pages, start=1):
-            text = page.extract_text()
+        for page_num in range(len(doc)):
+            page = doc[page_num]
+            text = page.get_text()
             
             # Split into lines and process
             for line in text.split('\n'):
@@ -79,7 +80,7 @@ class DocumentProcessor:
                             "type": "article",
                             "article_no": f"{article_type} {article_num}",
                             "article_number": int(article_num),
-                            "page": page_num,
+                            "page": page_num + 1,  # Convert to 1-indexed
                             "language": "hr" if article_type == "Članak" else "en",
                             "document_id": document_id,
                             "document_name": document_name,
@@ -88,6 +89,9 @@ class DocumentProcessor:
                 elif current:
                     # Append content to current article
                     current["page_content"] += line + "\n"
+
+        # Close the document
+        doc.close()
 
         # Don't forget the last chunk
         if current:
@@ -159,7 +163,7 @@ class DocumentProcessor:
         print(f"{'='*60}\n")
 
         # Extract articles directly from PDF
-        print("🔄 Extracting text from PDF with pypdf...")
+        print("🔄 Extracting text from PDF with PyMuPDF...")
         chunks = self.extract_articles_from_pdf(pdf_path, document_id, document_name)
 
         # Split large chunks
