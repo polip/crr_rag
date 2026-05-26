@@ -4,7 +4,6 @@ from dotenv import load_dotenv
 from langchain_astradb import AstraDBVectorStore
 from astrapy import DataAPIClient
 from langchain_nvidia_ai_endpoints import NVIDIAEmbeddings
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from document_router import DocumentRouter
 

@@ -8,7 +8,7 @@ from typing import List, Dict, Tuple, Optional
 from dotenv import load_dotenv
 
 from langchain_nvidia_ai_endpoints import NVIDIAEmbeddings
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from astrapy import DataAPIClient
 
@@ -21,7 +21,7 @@ class DocumentRouter:
     def __init__(self):
         # Verify required environment variables
         required_vars = ["NVIDIA_API_KEY", "ASTRA_DB_TOKEN", "ASTRA_DB_API_ENDPOINT", 
-                        "ASTRA_DB_COLLECTION_NAME", "GEMINI_API_KEY"]
+                        "ASTRA_DB_COLLECTION_NAME", "GROQ_API_KEY"]
         missing_vars = [var for var in required_vars if not os.getenv(var)]
         if missing_vars:
             raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
@@ -43,10 +43,10 @@ class DocumentRouter:
             raise
 
         # Initialize LLM for routing decisions
-        self.llm = ChatGoogleGenerativeAI(
-            model=os.getenv("GEMINI_MODEL_NAME", "gemini-2.0-flash"),
+        self.llm = ChatGroq(
+            model=os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile"),
             temperature=0.1,
-            google_api_key=os.getenv("GEMINI_API_KEY")
+            groq_api_key=os.getenv("GROQ_API_KEY")
         )
 
         # Cache available documents (with timeout protection)

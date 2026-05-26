@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Multi-Document Legal RAG (Retrieval-Augmented Generation) system for querying financial regulation documents (CRR, CRD) with intelligent document routing. Built with LangChain, AstraDB vector store, NVIDIA embeddings, and Google Gemini LLM.
+Multi-Document Legal RAG (Retrieval-Augmented Generation) system for querying financial regulation documents (CRR, CRD) with intelligent document routing. Built with LangChain, AstraDB vector store, NVIDIA embeddings, and Groq LLM.
 
 ## Core Architecture
 
@@ -18,7 +18,7 @@ Multi-Document Legal RAG (Retrieval-Augmented Generation) system for querying fi
 
 2. **Document Routing Layer** ([document_router.py](document_router.py))
    - AI-powered routing that analyzes queries to select relevant documents
-   - Uses Google Gemini for routing decisions
+   - Uses Groq LLM for routing decisions
    - Supports three modes: auto-route, all documents, or specific document selection
    - Implements metadata filtering by `document_id` for targeted retrieval
 
@@ -30,7 +30,7 @@ Multi-Document Legal RAG (Retrieval-Augmented Generation) system for querying fi
 **Data Flow:**
 ```
 PDF → article extraction → token validation → chunk splitting → AstraDB (with NVIDIA embeddings)
-User query → document routing → vector search → context retrieval → Gemini LLM → response
+User query → document routing → vector search → context retrieval → Groq LLM → response
 ```
 
 ## Development Commands
@@ -131,11 +131,11 @@ Each chunk includes:
 - **Production Dockerfile:** [Dockerfile.production](Dockerfile.production)
 - **Environment variables required:**
   - `NVIDIA_API_KEY`
-  - `GEMINI_API_KEY`
+  - `GROQ_API_KEY`
   - `ASTRA_DB_TOKEN`
   - `ASTRA_DB_API_ENDPOINT`
   - `ASTRA_DB_COLLECTION_NAME`
-  - `GEMINI_MODEL_NAME` (optional)
+  - `GROQ_MODEL_NAME` (optional, default: llama-3.3-70b-versatile)
 
 ## Project Structure
 ```
