@@ -44,7 +44,7 @@ class DocumentRouter:
 
         # Initialize LLM for routing decisions
         self.llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
+            model=os.getenv("GEMINI_MODEL_NAME", "gemini-2.0-flash"),
             temperature=0.1,
             google_api_key=os.getenv("GEMINI_API_KEY")
         )
