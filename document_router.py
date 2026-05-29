@@ -7,7 +7,7 @@ import os
 from typing import List, Dict, Tuple, Optional
 from dotenv import load_dotenv
 
-from langchain_nvidia_ai_endpoints import NVIDIAEmbeddings
+from langchain_openai import OpenAIEmbeddings
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from astrapy import DataAPIClient
@@ -20,16 +20,16 @@ class DocumentRouter:
 
     def __init__(self):
         # Verify required environment variables
-        required_vars = ["NVIDIA_API_KEY", "ASTRA_DB_TOKEN", "ASTRA_DB_API_ENDPOINT", 
+        required_vars = ["OPENAI_API_KEY", "ASTRA_DB_TOKEN", "ASTRA_DB_API_ENDPOINT", 
                         "ASTRA_DB_COLLECTION_NAME", "GROQ_API_KEY"]
         missing_vars = [var for var in required_vars if not os.getenv(var)]
         if missing_vars:
             raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
         
         # Initialize embeddings
-        self.embeddings = NVIDIAEmbeddings(
-            model="nvidia/nv-embedqa-e5-v5",
-            api_key=os.getenv("NVIDIA_API_KEY")
+        self.embeddings = OpenAIEmbeddings(
+            model="text-embedding-3-small",
+            api_key=os.getenv("OPENAI_API_KEY")
         )
 
         # Connect to Astra DB with timeout

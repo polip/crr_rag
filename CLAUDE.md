@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Multi-Document Legal RAG (Retrieval-Augmented Generation) system for querying financial regulation documents (CRR, CRD) with intelligent document routing. Built with LangChain, AstraDB vector store, NVIDIA embeddings, and Groq LLM.
+Multi-Document Legal RAG (Retrieval-Augmented Generation) system for querying financial regulation documents (CRR, CRD) with intelligent document routing. Built with LangChain, AstraDB vector store, OpenAI embeddings, and Groq LLM.
 
 ## Core Architecture
 
@@ -29,7 +29,7 @@ Multi-Document Legal RAG (Retrieval-Augmented Generation) system for querying fi
 
 **Data Flow:**
 ```
-PDF → article extraction → token validation → chunk splitting → AstraDB (with NVIDIA embeddings)
+PDF → article extraction → token validation → chunk splitting → AstraDB (with OpenAI embeddings)
 User query → document routing → vector search → context retrieval → Groq LLM → response
 ```
 
@@ -121,7 +121,7 @@ Each chunk includes:
 - Optional: `sub_chunk`, `total_sub_chunks`, `original_chunk_tokens`, `article_redetected`
 
 ### Vector Store Configuration
-- **Embeddings:** NVIDIA `nv-embedqa-e5-v5` model
+- **Embeddings:** OpenAI `text-embedding-3-small` model
 - **Batch size:** 25 chunks per upload
 - **Retrieval:** Top-k=6-8 chunks per query with optional document filtering
 - **Collection:** Single AstraDB collection with multi-document support
@@ -130,7 +130,7 @@ Each chunk includes:
 - **GitHub Actions:** Auto-deploys to Google Cloud Run on push to main
 - **Production Dockerfile:** [Dockerfile.production](Dockerfile.production)
 - **Environment variables required:**
-  - `NVIDIA_API_KEY`
+  - `OPENAI_API_KEY`
   - `GROQ_API_KEY`
   - `ASTRA_DB_TOKEN`
   - `ASTRA_DB_API_ENDPOINT`

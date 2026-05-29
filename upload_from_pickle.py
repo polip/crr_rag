@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_astradb import AstraDBVectorStore
-from langchain_nvidia_ai_endpoints import NVIDIAEmbeddings
+from langchain_openai import OpenAIEmbeddings
 
 # Load environment variables
 load_dotenv()
@@ -33,9 +33,9 @@ class PickleUploader:
         )
         
         # Initialize embeddings and vector store
-        self.embeddings = NVIDIAEmbeddings(
-            model="nvidia/nv-embedqa-e5-v5",
-            api_key=os.getenv("NVIDIA_API_KEY")
+        self.embeddings = OpenAIEmbeddings(
+            model="text-embedding-3-small",
+            api_key=os.getenv("OPENAI_API_KEY")
         )
         
         self.vectorstore = AstraDBVectorStore(

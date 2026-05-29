@@ -3,7 +3,7 @@ import os
 from dotenv import load_dotenv
 from langchain_astradb import AstraDBVectorStore
 from astrapy import DataAPIClient
-from langchain_nvidia_ai_endpoints import NVIDIAEmbeddings
+from langchain_openai import OpenAIEmbeddings
 from langchain_core.prompts import ChatPromptTemplate
 from document_router import DocumentRouter
 
