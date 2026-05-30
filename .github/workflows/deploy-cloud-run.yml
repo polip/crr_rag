@@ -78,7 +78,11 @@ jobs:
             --max-instances 10 \
             --timeout 300 \
             --cpu-boost \
-            --set-env-vars OPENAI_EMBEDD_KEY=${{ secrets.OPENAI_EMBEDD_KEY }},OPENAI_CHAT_KEY=${{ secrets.OPENAI_CHAT_KEY }},ASTRA_DB_TOKEN=${{ secrets.ASTRA_DB_TOKEN }},ASTRA_DB_API_ENDPOINT=${{ secrets.ASTRA_DB_API_ENDPOINT }},ASTRA_DB_COLLECTION_NAME=${{ secrets.ASTRA_DB_COLLECTION_NAME }} \
+            --set-env-vars OPENAI_EMBEDD_KEY=${{ secrets.OPENAI_EMBEDD_KEY }} \
+            --set-env-vars OPENAI_CHAT_KEY=${{ secrets.OPENAI_CHAT_KEY }} \
+            --set-env-vars ASTRA_DB_TOKEN=${{ secrets.ASTRA_DB_TOKEN }} \
+            --set-env-vars ASTRA_DB_API_ENDPOINT=${{ secrets.ASTRA_DB_API_ENDPOINT }} \
+            --set-env-vars ASTRA_DB_COLLECTION_NAME=${{ secrets.ASTRA_DB_COLLECTION_NAME }} \
             --quiet
 
       - name: Verify deployment
