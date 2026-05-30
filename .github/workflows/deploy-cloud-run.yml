@@ -63,6 +63,16 @@ jobs:
         run: |
           docker push --all-tags ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}
 
+      - name: Write env vars file
+        run: |
+          cat > /tmp/env-vars.yaml <<EOF
+          OPENAI_EMBEDD_KEY: "${{ secrets.OPENAI_EMBEDD_KEY }}"
+          OPENAI_CHAT_KEY: "${{ secrets.OPENAI_CHAT_KEY }}"
+          ASTRA_DB_TOKEN: "${{ secrets.ASTRA_DB_TOKEN }}"
+          ASTRA_DB_API_ENDPOINT: "${{ secrets.ASTRA_DB_API_ENDPOINT }}"
+          ASTRA_DB_COLLECTION_NAME: "${{ secrets.ASTRA_DB_COLLECTION_NAME }}"
+          EOF
+
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy ${{ env.SERVICE_NAME }} \
@@ -78,11 +88,7 @@ jobs:
             --max-instances 10 \
             --timeout 300 \
             --cpu-boost \
-            --set-env-vars OPENAI_EMBEDD_KEY=${{ secrets.OPENAI_EMBEDD_KEY }} \
-            --set-env-vars OPENAI_CHAT_KEY=${{ secrets.OPENAI_CHAT_KEY }} \
-            --set-env-vars ASTRA_DB_TOKEN=${{ secrets.ASTRA_DB_TOKEN }} \
-            --set-env-vars ASTRA_DB_API_ENDPOINT=${{ secrets.ASTRA_DB_API_ENDPOINT }} \
-            --set-env-vars ASTRA_DB_COLLECTION_NAME=${{ secrets.ASTRA_DB_COLLECTION_NAME }} \
+            --env-vars-file /tmp/env-vars.yaml \
             --quiet
 
       - name: Verify deployment
