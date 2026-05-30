@@ -16,7 +16,7 @@ on:
       - '.streamlit/**'
       # GitHub Actions workflow itself
       - '.github/workflows/deploy-cloud-run.yml'
-  workflow_dispatch:  # Allow manual triggers
+  workflow_dispatch:
 
 env:
   PROJECT_ID: 'rag-apps-482206'
@@ -29,38 +29,28 @@ jobs:
   deploy:
     name: Build and Deploy to Cloud Run
     runs-on: ubuntu-latest
-    
+
     permissions:
       contents: read
-      id-token: write  # Required for Workload Identity Federation
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
-      # Authenticate with Google Cloud using Workload Identity Federation
-      # (Recommended: more secure than service account keys)
-      #- name: Authenticate to Google Cloud
-      #  id: auth
-      #  uses: google-github-actions/auth@v2
-      #  with:
-      #    workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-      #    service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
-      
-      # Alternative: Use service account key (less secure, but simpler)
-      # Uncomment this and comment out the above step if using service account key
+
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-           credentials_json: ${{ secrets.GCP_SA_KEY }}
-      
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
-      
+
+      - name: Set default GCP project
+        run: gcloud config set project ${{ env.PROJECT_ID }}
+
       - name: Configure Docker for Artifact Registry
-        run: |
-          gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
-      
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
+
       - name: Build Docker image
         run: |
           docker build \
@@ -68,17 +58,17 @@ jobs:
             -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
             -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest \
             .
-      
+
       - name: Push Docker image to Artifact Registry
         run: |
-          docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-          docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest
-      
+          docker push --all-tags ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}
+
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy ${{ env.SERVICE_NAME }} \
             --image ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
             --region ${{ env.REGION }} \
+            --project ${{ env.PROJECT_ID }} \
             --platform managed \
             --allow-unauthenticated \
             --port 8501 \
@@ -90,16 +80,12 @@ jobs:
             --cpu-boost \
             --set-env-vars OPENAI_EMBEDD_KEY=${{ secrets.OPENAI_EMBEDD_KEY }},OPENAI_CHAT_KEY=${{ secrets.OPENAI_CHAT_KEY }},ASTRA_DB_TOKEN=${{ secrets.ASTRA_DB_TOKEN }},ASTRA_DB_API_ENDPOINT=${{ secrets.ASTRA_DB_API_ENDPOINT }},ASTRA_DB_COLLECTION_NAME=${{ secrets.ASTRA_DB_COLLECTION_NAME }} \
             --quiet
-      
-      - name: Get Service URL
+
+      - name: Verify deployment
         run: |
           SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
             --region ${{ env.REGION }} \
+            --project ${{ env.PROJECT_ID }} \
             --format 'value(status.url)')
           echo "Service deployed to: $SERVICE_URL"
-          echo "SERVICE_URL=$SERVICE_URL" >> $GITHUB_ENV
-      
-      - name: Test deployment
-        run: |
-          echo "Testing health endpoint..."
-          curl -f ${{ env.SERVICE_URL }}/_stcore/health || echo "Health check failed (expected if Streamlit health endpoint differs)"
+          curl -sf "$SERVICE_URL/_stcore/health"
