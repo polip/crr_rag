@@ -65,13 +65,13 @@ jobs:
 
       - name: Write env vars file
         run: |
-          cat > /tmp/env-vars.yaml <<EOF
-          OPENAI_EMBEDD_KEY: "${{ secrets.OPENAI_EMBEDD_KEY }}"
-          OPENAI_CHAT_KEY: "${{ secrets.OPENAI_CHAT_KEY }}"
-          ASTRA_DB_TOKEN: "${{ secrets.ASTRA_DB_TOKEN }}"
-          ASTRA_DB_API_ENDPOINT: "${{ secrets.ASTRA_DB_API_ENDPOINT }}"
-          ASTRA_DB_COLLECTION_NAME: "${{ secrets.ASTRA_DB_COLLECTION_NAME }}"
-          EOF
+          printf 'OPENAI_EMBEDD_KEY: "%s"\nOPENAI_CHAT_KEY: "%s"\nASTRA_DB_TOKEN: "%s"\nASTRA_DB_API_ENDPOINT: "%s"\nASTRA_DB_COLLECTION_NAME: "%s"\n' \
+            "${{ secrets.OPENAI_EMBEDD_KEY }}" \
+            "${{ secrets.OPENAI_CHAT_KEY }}" \
+            "${{ secrets.ASTRA_DB_TOKEN }}" \
+            "${{ secrets.ASTRA_DB_API_ENDPOINT }}" \
+            "${{ secrets.ASTRA_DB_COLLECTION_NAME }}" \
+            > /tmp/env-vars.yaml
 
       - name: Deploy to Cloud Run
         run: |
