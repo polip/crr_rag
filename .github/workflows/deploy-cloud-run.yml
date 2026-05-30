@@ -53,8 +53,7 @@ jobs:
 
       - name: Build Docker image
         run: |
-          docker build \
-            -f Dockerfile.production \
+          docker build -f Dockerfile.production \
             -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
             -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest \
             .
@@ -62,16 +61,6 @@ jobs:
       - name: Push Docker image to Artifact Registry
         run: |
           docker push --all-tags ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}
-
-      - name: Write env vars file
-        run: |
-          printf 'OPENAI_EMBEDD_KEY: "%s"\nOPENAI_CHAT_KEY: "%s"\nASTRA_DB_TOKEN: "%s"\nASTRA_DB_API_ENDPOINT: "%s"\nASTRA_DB_COLLECTION_NAME: "%s"\n' \
-            "${{ secrets.OPENAI_EMBEDD_KEY }}" \
-            "${{ secrets.OPENAI_CHAT_KEY }}" \
-            "${{ secrets.ASTRA_DB_TOKEN }}" \
-            "${{ secrets.ASTRA_DB_API_ENDPOINT }}" \
-            "${{ secrets.ASTRA_DB_COLLECTION_NAME }}" \
-            > /tmp/env-vars.yaml
 
       - name: Deploy to Cloud Run
         run: |
@@ -88,7 +77,7 @@ jobs:
             --max-instances 10 \
             --timeout 300 \
             --cpu-boost \
-            --env-vars-file /tmp/env-vars.yaml \
+            --set-env-vars "OPENAI_EMBEDD_KEY=${{ secrets.OPENAI_EMBEDD_KEY }},OPENAI_CHAT_KEY=${{ secrets.OPENAI_CHAT_KEY }},ASTRA_DB_TOKEN=${{ secrets.ASTRA_DB_TOKEN }},ASTRA_DB_API_ENDPOINT=${{ secrets.ASTRA_DB_API_ENDPOINT }},ASTRA_DB_COLLECTION_NAME=${{ secrets.ASTRA_DB_COLLECTION_NAME }}" \
             --quiet
 
       - name: Verify deployment
