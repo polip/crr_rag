@@ -6,8 +6,9 @@ A Retrieval-Augmented Generation (RAG) system for querying financial regulation 
 
 - **Multi-Document Support**: Query across multiple regulation documents (CRR, CRD, etc.)
 - **Intelligent Document Routing**: AI automatically selects relevant documents for each query
-- **Article-Level Chunking**: Extracts and processes documents by article boundaries
-- **Smart Token Management**: Automatic chunk splitting with 435-token safety threshold
+- **Article-Level Retrieval**: Detect article numbers in queries (e.g., "Article 208") for precise metadata-filtered search
+- **Article Boundary Splitting**: Oversized chunks split at article boundaries first, preserving correct article metadata
+- **Smart Token Management**: Automatic chunk splitting with 870-token safety threshold
 - **Flexible Processing**: Process to pickle only or directly upload to vector database
 - **Vector Storage**: Powered by AstraDB for efficient similarity search
 - **Modern UI**: Streamlit-based chat interface
@@ -28,21 +29,21 @@ A Retrieval-Augmented Generation (RAG) system for querying financial regulation 
          │
 ┌────────▼────────────────┐
 │  AstraDB Vector Store   │
-│  (NVIDIA Embeddings)    │
+│  (OpenAI Embeddings)    │
 └────────┬────────────────┘
          │
 ┌────────▼────────────────┐
-│  Google Gemini LLM      │
+│  OpenAI LLM              │
 │  (Response Generation)  │
 └─────────────────────────┘
 ```
 
 ## 🛠️ Tech Stack
 
-- **PDF Processing**: pypdf (lightweight text extraction)
-- **Embeddings**: NVIDIA AI Endpoints (nv-embedqa-e5-v5)
+- **PDF Processing**: PyMuPDF (fitz)
+- **Embeddings**: OpenAI (text-embedding-3-small)
 - **Vector Store**: Astra DB (Cassandra-based)
-- **LLM**: Google Gemini 2.5 Flash
+- **LLM**: OpenAI (gpt-4o-mini)
 - **Framework**: LangChain
 - **UI**: Streamlit
 - **Infrastructure**: Docker, Docker Compose
@@ -53,8 +54,7 @@ A Retrieval-Augmented Generation (RAG) system for querying financial regulation 
 - UV package manager (recommended) or pip
 - Docker & Docker Compose (for containerized deployment)
 - API Keys:
-  - NVIDIA API Key (for embeddings)
-  - Google Gemini API Key (for LLM)
+  - OpenAI API Key (for embeddings and LLM)
   - Astra DB credentials (token, endpoint, collection name)
 
 ## 🚀 Quick Start
@@ -71,11 +71,9 @@ cd crr_rag
 Create a `.env` file:
 
 ```env
-# NVIDIA API (Embeddings)
-NVIDIA_API_KEY=your_nvidia_api_key
-
-# Google Gemini (LLM)
-GEMINI_API_KEY=your_gemini_api_key
+# OpenAI (Embeddings & LLM)
+OPENAI_EMBEDD_KEY=your_openai_api_key
+OPENAI_CHAT_KEY=your_openai_api_key
 
 # Astra DB (Vector Store)
 ASTRA_DB_TOKEN=your_astra_db_token
@@ -158,9 +156,9 @@ Use when: Recovering from database issues or migrating to a new collection.
 ### Processing Documents
 
 The `process_document.py` script:
-- Extracts text from PDF using pypdf
+- Extracts text from PDF using PyMuPDF (fitz)
 - Identifies article boundaries with regex
-- Splits large articles into smaller chunks (max 435 tokens)
+- Splits large articles into smaller chunks (max 870 tokens)
 - Uploads chunks to AstraDB with metadata
 - Saves backup to pickle files
 
@@ -184,7 +182,7 @@ uv run process_document.py pdfs/regulation.pdf MiFID_II 'MiFID II Regulation' --
 1. PDF text extracted page by page
 2. Articles identified by regex pattern (Article/Članak + number)
 3. Text grouped by article with metadata
-4. Oversized chunks automatically split (safety threshold: 435 tokens)
+4. Oversized chunks automatically split (safety threshold: 870 tokens)
 5. Chunks uploaded to AstraDB in batches (unless `--pickle-only` is used)
 6. Backup saved to `pickle_files/chunks_{document_id}_{timestamp}.pkl`
 
@@ -210,7 +208,7 @@ uv run upload_from_pickle.py pickle_files/chunks_CRR_20260306_143022.pkl --skip-
 
 **What happens:**
 1. Loads chunks from pickle file
-2. Validates each chunk against 512 token limit (unless `--skip-validation` is used)
+2. Validates each chunk against 1024 token limit (unless `--skip-validation` is used)
 3. Automatically splits any oversized chunks
 4. Uploads to AstraDB in batches of 25
 5. Reports success/failure statistics
@@ -242,6 +240,7 @@ uv run check_collection.py
 - **Auto-Route Mode**: AI automatically selects relevant documents based on query
 - **All Documents Mode**: Search across all available documents
 - **Specific Documents Mode**: Query only selected documents
+- **Article Number Detection**: Ask "Article 208" to retrieve only that specific article (metadata-filtered search)
 - **Chat History**: Persistent conversation within session
 - **Document Stats**: View available documents and chunk counts
 - **Sample Queries**: Pre-loaded example questions
@@ -288,22 +287,39 @@ crr_rag/
 
 ## ⚙️ Configuration
 
-### Token Management
+### Chunking Strategy
 
-The system uses a **safety threshold** (85% of 512 tokens = 435 tokens) to ensure chunks stay within the embedding model's limit:
+The system uses a **multi-stage chunking approach** to preserve article metadata:
 
-- Initial chunk size: 1600 characters (~400 tokens)
-- Safety threshold: 435 tokens
-- Maximum allowed: 512 tokens
+1. **Article Extraction**: PDF text is split at article boundaries using regex `^(Članak|Article)\s+(\d+)`
+2. **Token Validation**: Each chunk is checked against the safety threshold (870 tokens)
+3. **Article Boundary Splitting**: Oversized chunks are first split at internal article boundaries
+4. **Recursive Splitting**: If still oversized after article split, uses `RecursiveCharacterTextSplitter`
+5. **Article Re-detection**: Each sub-chunk searches its **entire content** for article headings to correct metadata
+
+**Token Management:**
+- Initial chunk size: 3200 characters (~800 tokens)
+- Safety threshold: 870 tokens (85% of 1024)
+- Maximum allowed: 1024 tokens
 - Chunks exceeding the threshold are automatically split
+- Article re-detection ensures correct metadata after splitting
 
 ### Document Router
 
 The AI-powered router:
 - Analyzes user queries to determine relevant documents
-- Uses metadata filtering by `document_id`
-- Performs top-k retrieval (default: 10 chunks per query)
+- **Detects article numbers** in queries (e.g., "Article 208", "Članak 100") and filters by `metadata.article_number`
+- Uses metadata filtering by `document_id` for targeted retrieval
+- Performs top-k retrieval (default: 6-8 chunks per query)
 - Generates context-aware responses using retrieved chunks
+
+**Article Number Detection:**
+When a query contains an article reference, the router automatically:
+1. Extracts the article number using regex pattern matching
+2. Adds `metadata.article_number` filter to the vector search
+3. Returns only chunks from that specific article
+
+Supported formats: "Article 208", "Članak 208", "article 208", "What does Article 208 say?"
 
 ## 🔍 Monitoring
 
@@ -314,7 +330,7 @@ After processing a document, check the output:
 **With database upload (default):**
 ```
 ✅ Extracted {n} articles
-🔧 Checking chunks for 512 token limit (using safety threshold: 435)
+🔧 Checking chunks for 1024 token limit (using safety threshold: 870)
 ✅ Processed {n} chunks:
    - {x} within limit
    - {y} split into sub-chunks
@@ -328,7 +344,7 @@ After processing a document, check the output:
 **With --pickle-only:**
 ```
 ✅ Extracted {n} articles
-🔧 Checking chunks for 512 token limit (using safety threshold: 435)
+🔧 Checking chunks for 1024 token limit (using safety threshold: 870)
 ✅ Processed {n} chunks
 💾 Backup saved to: pickle_files/chunks_{id}_{timestamp}.pkl
 💡 To upload to vector database later, use upload_from_pickle.py
@@ -345,7 +361,7 @@ uv run check_collection.py
 
 ### Token Limit Errors
 
-If batches fail with "Input length exceeds maximum allowed token size 512":
+If batches fail with "Input length exceeds maximum allowed token size":
 - The safety threshold should prevent this, but if it occurs:
 - Use `--pickle-only` to process first, then review chunks
 - Upload with validation enabled: `uv run upload_from_pickle.py <pickle_file>`
@@ -377,19 +393,42 @@ If documents don't appear:
 2. Check metadata includes `document_id` and `document_name`
 3. Restart Streamlit to refresh cached data
 
+### Article Not Found in Search
+
+If asking for a specific article (e.g., "Article 208") returns wrong results:
+1. Verify the article exists: `uv run check_collection.py`
+2. Use exact format: "Article 208" or "Članak 208"
+3. The router auto-detects article numbers and filters by metadata
+4. Check article number range in your processed document
+
 ### PDF Processing Errors
 
-If pypdf fails to extract text:
+If PyMuPDF fails to extract text:
 - Ensure PDF is text-based (not scanned images)
 - Check PDF file is not corrupted
 - Verify file path is correct
 
 ## 📊 Performance
 
-- **PDF Processing**: ~2-5 seconds per document (pypdf)
-- **Embedding**: ~100 chunks/minute (NVIDIA API rate limits)
+- **PDF Processing**: ~2-5 seconds per document (PyMuPDF)
+- **Embedding**: ~500 chunks/minute (OpenAI API rate limits)
 - **Query Response**: ~2-3 seconds average
+- **Article Retrieval**: Instant (metadata-filtered search)
 - **Document Loading**: Cached after first load in Streamlit
+
+## 📝 Metadata Structure
+
+Each chunk includes:
+- `document_id`: Unique identifier for document
+- `document_name`: Human-readable document name
+- `article_no`: Full article reference (e.g., "Article 123")
+- `article_number`: Numeric article number (int) - used for filtering
+- `page`: Page number in source PDF
+- `language`: "hr" or "en"
+- `type`: "article"
+- `sub_chunk`: Sub-chunk index (if split)
+- `total_sub_chunks`: Total sub-chunks (if split)
+- `article_redetected`: True if article was re-detected after splitting
 
 ## 🔐 Security
 
@@ -416,4 +455,4 @@ For issues or questions, check existing documentation:
 
 ---
 
-Built with using LangChain, AstraDB, pypdf, and Google Gemini
+Built with LangChain, AstraDB, PyMuPDF, and OpenAI

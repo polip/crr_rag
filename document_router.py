@@ -4,11 +4,11 @@ Routes questions to appropriate documents and combines knowledge from multiple s
 """
 
 import os
+import re
 from typing import List, Dict, Tuple, Optional
 from dotenv import load_dotenv
 
-from langchain_openai import OpenAIEmbeddings
-from langchain_groq import ChatGroq
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from astrapy import DataAPIClient
 
@@ -18,10 +18,12 @@ load_dotenv()
 class DocumentRouter:
     """Routes queries to appropriate documents and combines results"""
 
+    ARTICLE_PATTERN = re.compile(r'(?:Članak|Article)\s+(\d+)', re.IGNORECASE)
+
     def __init__(self):
         # Verify required environment variables
-        required_vars = ["OPENAI_API_KEY", "ASTRA_DB_TOKEN", "ASTRA_DB_API_ENDPOINT", 
-                        "ASTRA_DB_COLLECTION_NAME", "GROQ_API_KEY"]
+        required_vars = ["OPENAI_EMBEDD_KEY", "ASTRA_DB_TOKEN", "ASTRA_DB_API_ENDPOINT", 
+                        "ASTRA_DB_COLLECTION_NAME", "OPENAI_CHAT_KEY"]
         missing_vars = [var for var in required_vars if not os.getenv(var)]
         if missing_vars:
             raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
@@ -29,7 +31,7 @@ class DocumentRouter:
         # Initialize embeddings
         self.embeddings = OpenAIEmbeddings(
             model="text-embedding-3-small",
-            api_key=os.getenv("OPENAI_API_KEY")
+            api_key=os.getenv("OPENAI_EMBEDD_KEY")
         )
 
         # Connect to Astra DB with timeout
@@ -43,10 +45,10 @@ class DocumentRouter:
             raise
 
         # Initialize LLM for routing decisions
-        self.llm = ChatGroq(
-            model=os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile"),
+        self.llm = ChatOpenAI(  
+            model=os.getenv("OPENAI_MODEL_NAME", "gpt-4o-mini"),
             temperature=0.1,
-            groq_api_key=os.getenv("GROQ_API_KEY")
+            api_key=os.getenv("OPENAI_CHAT_KEY")
         )
 
         # Cache available documents (with timeout protection)
@@ -139,22 +141,32 @@ Question: "Compare requirements across regulations" -> ALL
             # Filter to valid document IDs
             return [doc_id for doc_id in doc_ids if doc_id in self.available_documents]
 
+    def detect_article_number(self, query: str) -> Optional[int]:
+        """Detect if query references a specific article number"""
+        match = self.ARTICLE_PATTERN.search(query)
+        if match:
+            return int(match.group(1))
+        return None
+
     def retrieve_documents(
         self,
         query: str,
         k: int = 6,
-        document_ids: Optional[List[str]] = None
+        document_ids: Optional[List[str]] = None,
+        article_number: Optional[int] = None
     ) -> List[Dict]:
         """
         Retrieve relevant documents using vector search
-        Optionally filter by document IDs
+        Optionally filter by document IDs or specific article number
         """
         query_embedding = self.embeddings.embed_query(query)
 
-        # Build filter if document IDs specified
+        # Build filter
         filter_query = {}
         if document_ids:
-            filter_query = {"metadata.document_id": {"$in": document_ids}}
+            filter_query["metadata.document_id"] = {"$in": document_ids}
+        if article_number is not None:
+            filter_query["metadata.article_number"] = article_number
 
         # Execute search
         results = self.collection.find(
@@ -215,8 +227,18 @@ Question: "Compare requirements across regulations" -> ALL
             doc_ids = None  # Query all documents
             print(f"🎯 Querying all documents")
 
+        # Detect if query references a specific article
+        detected_article = self.detect_article_number(question)
+        if detected_article is not None:
+            print(f"📄 Detected article number: {detected_article}")
+
         # Retrieve relevant chunks
-        docs = self.retrieve_documents(question, k=8, document_ids=doc_ids)
+        docs = self.retrieve_documents(
+            question,
+            k=8,
+            document_ids=doc_ids,
+            article_number=detected_article
+        )
 
         # Create answer
         context = self.format_docs(docs)

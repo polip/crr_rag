@@ -23,13 +23,13 @@ load_dotenv()
 class DocumentProcessor:
     """Process legal PDF documents for RAG system"""
 
-    def __init__(self, max_tokens: int = 512):
+    def __init__(self, max_tokens: int = 1024):
         self.max_tokens = max_tokens
         # Use safety threshold - only accept chunks well below the limit
-        self.safe_token_limit = int(max_tokens * 0.85)  # 435 tokens - safety margin
+        self.safe_token_limit = int(max_tokens * 0.85)  # 870 tokens - safety margin
         self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1600,  # ~400 tokens with conservative estimate
-            chunk_overlap=100,
+            chunk_size=3200,  # ~800 tokens with conservative estimate
+            chunk_overlap=150,
             separators=["\n\n", "\n", ". ", " ", ""],
             keep_separator=True,
             length_function=len,
@@ -118,33 +118,45 @@ class DocumentProcessor:
                 oversized_count += 1
                 original_article = chunk.metadata.get('article_number', 'unknown')
 
-                # Split the oversized chunk
-                sub_chunks = self.text_splitter.split_documents([chunk])
+                # First, try to split at article boundaries
+                article_splits = self._split_at_article_boundaries(chunk)
+                
+                if len(article_splits) > 1:
+                    # Successfully split at article boundaries
+                    for j, sub_chunk in enumerate(article_splits):
+                        sub_chunk.metadata['sub_chunk'] = j + 1
+                        sub_chunk.metadata['total_sub_chunks'] = len(article_splits)
+                        sub_chunk.metadata['original_chunk_tokens'] = int(estimated_tokens)
+                        sub_chunk.metadata['article_redetected'] = True
+                        redetected_count += 1
+                        
+                        # Check if still oversized after article split
+                        if self.estimate_tokens(sub_chunk.page_content) > self.safe_token_limit:
+                            further_splits = self.text_splitter.split_documents([sub_chunk])
+                            for k, further_chunk in enumerate(further_splits):
+                                further_chunk.metadata = sub_chunk.metadata.copy()
+                                further_chunk.metadata['sub_chunk'] = j + 1 + (k / 100)  # Unique identifier
+                                self._redetect_article_in_chunk(further_chunk, original_article)
+                                redetected_count += 1
+                                valid_chunks.append(further_chunk)
+                        else:
+                            valid_chunks.append(sub_chunk)
+                else:
+                    # No article boundaries found, use regular splitter
+                    sub_chunks = self.text_splitter.split_documents([chunk])
 
-                for j, sub_chunk in enumerate(sub_chunks):
-                    # Start with original metadata
-                    sub_chunk.metadata = chunk.metadata.copy()
-                    sub_chunk.metadata['sub_chunk'] = j + 1
-                    sub_chunk.metadata['total_sub_chunks'] = len(sub_chunks)
-                    sub_chunk.metadata['original_chunk_tokens'] = int(estimated_tokens)
+                    for j, sub_chunk in enumerate(sub_chunks):
+                        # Start with original metadata
+                        sub_chunk.metadata = chunk.metadata.copy()
+                        sub_chunk.metadata['sub_chunk'] = j + 1
+                        sub_chunk.metadata['total_sub_chunks'] = len(sub_chunks)
+                        sub_chunk.metadata['original_chunk_tokens'] = int(estimated_tokens)
 
-                    # Re-detect article number in this specific sub-chunk
-                    first_300_chars = sub_chunk.page_content[:300].strip()
-                    article_match = self.article_pattern.search(first_300_chars)
+                        # Re-detect article number in this sub-chunk (search entire content)
+                        self._redetect_article_in_chunk(sub_chunk, original_article)
+                        redetected_count += 1
 
-                    if article_match:
-                        article_type = article_match.group(1)
-                        article_num = article_match.group(2)
-                        detected_article_number = int(article_num)
-
-                        if detected_article_number != original_article:
-                            sub_chunk.metadata['article_no'] = f"{article_type} {article_num}"
-                            sub_chunk.metadata['article_number'] = detected_article_number
-                            sub_chunk.metadata['language'] = "hr" if article_type == "Članak" else "en"
-                            sub_chunk.metadata['article_redetected'] = True
-                            redetected_count += 1
-
-                    valid_chunks.append(sub_chunk)
+                        valid_chunks.append(sub_chunk)
 
         print(f"✅ Processed {len(chunks)} chunks:")
         print(f"   - {len(chunks) - oversized_count} within limit")
@@ -153,6 +165,52 @@ class DocumentProcessor:
         print(f"   - Final total: {len(valid_chunks)} chunks")
 
         return valid_chunks
+
+    def _split_at_article_boundaries(self, chunk: Document) -> List[Document]:
+        """Split a chunk at article boundaries if multiple articles are present"""
+        content = chunk.page_content
+        matches = list(self.article_pattern.finditer(content))
+        
+        if len(matches) <= 1:
+            return [chunk]
+        
+        splits = []
+        for idx, match in enumerate(matches):
+            start = match.start()
+            end = matches[idx + 1].start() if idx + 1 < len(matches) else len(content)
+            article_content = content[start:end].strip()
+            
+            article_type = match.group(1)
+            article_num = match.group(2)
+            
+            new_doc = Document(
+                page_content=article_content,
+                metadata=chunk.metadata.copy()
+            )
+            new_doc.metadata['article_no'] = f"{article_type} {article_num}"
+            new_doc.metadata['article_number'] = int(article_num)
+            new_doc.metadata['language'] = "hr" if article_type == "Članak" else "en"
+            splits.append(new_doc)
+        
+        return splits
+
+    def _redetect_article_in_chunk(self, chunk: Document, original_article: int) -> None:
+        """Search entire chunk content for article headings and update metadata"""
+        content = chunk.page_content
+        
+        # Search entire content, not just first 300 chars
+        article_match = self.article_pattern.search(content)
+        
+        if article_match:
+            article_type = article_match.group(1)
+            article_num = article_match.group(2)
+            detected_article_number = int(article_num)
+            
+            if detected_article_number != original_article:
+                chunk.metadata['article_no'] = f"{article_type} {article_num}"
+                chunk.metadata['article_number'] = detected_article_number
+                chunk.metadata['language'] = "hr" if article_type == "Članak" else "en"
+                chunk.metadata['article_redetected'] = True
 
     def process_pdf(self, pdf_path: str, document_id: str, document_name: str) -> List[Document]:
         """Process a PDF document and return chunks"""
@@ -203,7 +261,7 @@ class VectorStoreManager:
     def __init__(self):
         self.embeddings = OpenAIEmbeddings(
             model="text-embedding-3-small",
-            api_key=os.getenv("OPENAI_API_KEY")
+            api_key=os.getenv("OPENAI_EMBEDD_KEY")
         )
 
         self.vectorstore = AstraDBVectorStore(

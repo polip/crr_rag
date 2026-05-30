@@ -1,7 +1,3 @@
-"""
-Upload processed chunks from pickle files to AstraDB vector store
-Handles token limit validation and automatic chunk splitting
-"""
 
 import os
 import sys
@@ -21,11 +17,11 @@ load_dotenv()
 class PickleUploader:
     """Upload chunks from pickle files to vector database"""
 
-    def __init__(self, max_tokens: int = 512):
+    def __init__(self, max_tokens: int = 1024):
         self.max_tokens = max_tokens
-        self.safe_token_limit = int(max_tokens * 0.85)  # 435 tokens - safety margin
+        self.safe_token_limit = int(max_tokens * 0.85)  # 870 tokens - safety margin
         self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1400,  # Slightly smaller for re-splitting
+            chunk_size=2800,  # Slightly smaller for re-splitting
             chunk_overlap=150,
             separators=["\n\n", "\n", ". ", " ", ""],
             keep_separator=True,
@@ -35,7 +31,7 @@ class PickleUploader:
         # Initialize embeddings and vector store
         self.embeddings = OpenAIEmbeddings(
             model="text-embedding-3-small",
-            api_key=os.getenv("OPENAI_API_KEY")
+            api_key=os.getenv("OPENAI_EMBEDD_KEY")
         )
         
         self.vectorstore = AstraDBVectorStore(

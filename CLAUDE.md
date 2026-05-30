@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Multi-Document Legal RAG (Retrieval-Augmented Generation) system for querying financial regulation documents (CRR, CRD) with intelligent document routing. Built with LangChain, AstraDB vector store, OpenAI embeddings, and Groq LLM.
+Multi-Document Legal RAG (Retrieval-Augmented Generation) system for querying financial regulation documents (CRR, CRD) with intelligent document routing. Built with LangChain, AstraDB vector store, and OpenAI.
 
 ## Core Architecture
 
@@ -13,14 +13,17 @@ Multi-Document Legal RAG (Retrieval-Augmented Generation) system for querying fi
 1. **Document Processing Layer** ([process_document.py](process_document.py))
    - Extracts articles from PDF regulation documents using PyMuPDF (fitz)
    - Uses regex pattern matching for article boundaries: `^(Članak|Article)\s+(\d+)`
-   - Implements automatic chunk splitting with 435 token safety threshold (85% of 512 token limit)
+   - Implements automatic chunk splitting with 870 token safety threshold (85% of 1024 token limit)
+   - Splits oversized chunks at article boundaries first, then falls back to recursive character splitting
+   - Searches entire chunk content for article re-detection (not just first 300 chars)
    - Saves backup to pickle files before uploading to vector store
 
 2. **Document Routing Layer** ([document_router.py](document_router.py))
    - AI-powered routing that analyzes queries to select relevant documents
-   - Uses Groq LLM for routing decisions
+   - Uses OpenAI LLM for routing decisions
    - Supports three modes: auto-route, all documents, or specific document selection
    - Implements metadata filtering by `document_id` for targeted retrieval
+   - Detects article number references in queries and filters by `article_number` metadata
 
 3. **UI Layer** ([st_crr.py](st_crr.py))
    - Streamlit-based chat interface with persistent conversation history
@@ -30,7 +33,7 @@ Multi-Document Legal RAG (Retrieval-Augmented Generation) system for querying fi
 **Data Flow:**
 ```
 PDF → article extraction → token validation → chunk splitting → AstraDB (with OpenAI embeddings)
-User query → document routing → vector search → context retrieval → Groq LLM → response
+User query → document routing → vector search → context retrieval → OpenAI LLM → response
 ```
 
 ## Development Commands
@@ -99,8 +102,8 @@ uv run document_router.py
 ## Key Implementation Details
 
 ### Token Management
-- **Max tokens:** 512 (NVIDIA embedding model limit)
-- **Safety threshold:** 435 tokens (85% of max)
+- **Max tokens:** 1024 (OpenAI embedding model limit)
+- **Safety threshold:** 870 tokens (85% of max)
 - Automatic splitting when chunks exceed safety threshold
 - Token estimation: 1 token ≈ 4 characters
 
@@ -108,6 +111,8 @@ uv run document_router.py
 - Primary pattern: `^(Članak|Article)\s+(\d+)` (case-insensitive, multiline)
 - Supports bilingual documents (Croatian "Članak" and English "Article")
 - Re-detection performed after chunk splitting to maintain accurate article numbers
+- Oversized chunks split at article boundaries first, then recursive splitting if needed
+- Article number detection in user queries enables targeted retrieval
 
 ### Metadata Structure
 Each chunk includes:
@@ -130,12 +135,12 @@ Each chunk includes:
 - **GitHub Actions:** Auto-deploys to Google Cloud Run on push to main
 - **Production Dockerfile:** [Dockerfile.production](Dockerfile.production)
 - **Environment variables required:**
-  - `OPENAI_API_KEY`
-  - `GROQ_API_KEY`
+  - `OPENAI_EMBEDD_KEY` (for embeddings)
+  - `OPENAI_CHAT_KEY` (for chat/completions)
   - `ASTRA_DB_TOKEN`
   - `ASTRA_DB_API_ENDPOINT`
   - `ASTRA_DB_COLLECTION_NAME`
-  - `GROQ_MODEL_NAME` (optional, default: llama-3.3-70b-versatile)
+  - `OPENAI_MODEL_NAME` (optional, default: gpt-4o-mini)
 
 ## Project Structure
 ```
@@ -164,3 +169,5 @@ Each chunk includes:
 - Document routing uses cached document list (fetches 100 samples at init)
 - Streamlit caches RAG system initialization and document statistics (1 hour TTL)
 - All chunks are validated against token limits before upload (unless `--skip-validation`)
+- Uses OpenAI for both embeddings (`text-embedding-3-small`) and chat (`gpt-4o-mini`)
+- Article boundary splitting prioritizes semantic boundaries before falling back to character-based splitting
