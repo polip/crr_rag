@@ -4,9 +4,10 @@ FROM python:3.12-slim as builder
 WORKDIR /build
 
 
-# Install build dependencies
+# Install build dependencies and upgrade all packages
 RUN apt-get update && apt-get install -y \
     build-essential \
+    && apt-get upgrade -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy and install Python dependencies
@@ -19,11 +20,11 @@ FROM python:3.12-slim
 # Set working directory
 WORKDIR /app
 
-# Install runtime dependencies only
+# Install runtime dependencies and upgrade all packages
 RUN apt-get update && apt-get install -y \
     curl \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+    && apt-get upgrade -y \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for security
 RUN useradd -m -u 1000 appuser
