@@ -58,6 +58,5 @@ CMD ["streamlit", "run", "st_crr.py", \
      "--server.port=8501", \
      "--server.address=0.0.0.0", \
      "--server.headless=true", \
-     "--browser.serverAddress=0.0.0.0", \
      "--server.enableCORS=false", \
-     "--server.enableXsrfProtection=true"]
+     "--server.enableXsrfProtection=false"]
