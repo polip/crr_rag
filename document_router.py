@@ -216,13 +216,20 @@ Question: "Compare requirements across regulations" -> ALL
         Returns:
             (answer, retrieved_docs, queried_document_ids)
         """
+        import traceback
+
         # Determine which documents to query
         if specific_documents:
             doc_ids = specific_documents
             print(f"🎯 Querying specific documents: {doc_ids}")
         elif use_routing:
-            doc_ids = self.route_query(question)
-            print(f"🎯 Router selected documents: {doc_ids}")
+            try:
+                doc_ids = self.route_query(question)
+                print(f"🎯 Router selected documents: {doc_ids}")
+            except Exception as e:
+                print(f"❌ Route query failed: {e}")
+                traceback.print_exc()
+                raise
         else:
             doc_ids = None  # Query all documents
             print(f"🎯 Querying all documents")
@@ -233,12 +240,18 @@ Question: "Compare requirements across regulations" -> ALL
             print(f"📄 Detected article number: {detected_article}")
 
         # Retrieve relevant chunks
-        docs = self.retrieve_documents(
-            question,
-            k=8,
-            document_ids=doc_ids,
-            article_number=detected_article
-        )
+        try:
+            docs = self.retrieve_documents(
+                question,
+                k=8,
+                document_ids=doc_ids,
+                article_number=detected_article
+            )
+            print(f"📄 Retrieved {len(docs)} document chunks")
+        except Exception as e:
+            print(f"❌ Document retrieval failed: {e}")
+            traceback.print_exc()
+            raise
 
         # Create answer
         context = self.format_docs(docs)
@@ -272,7 +285,13 @@ Please provide a comprehensive answer with specific references to documents, art
         ])
 
         messages = prompt.format_messages(context=context, question=question)
-        response = self.llm.invoke(messages)
+        try:
+            response = self.llm.invoke(messages)
+            print("✅ LLM response generated")
+        except Exception as e:
+            print(f"❌ LLM invoke failed: {e}")
+            traceback.print_exc()
+            raise
 
         return response.content, docs, doc_ids or list(self.available_documents.keys())
 

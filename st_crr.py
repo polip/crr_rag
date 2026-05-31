@@ -219,6 +219,8 @@ def process_query(user_query):
                 })
 
             except Exception as e:
+                import traceback
+                traceback.print_exc()
                 error_msg = f"❌ Error: {str(e)}"
                 st.error(error_msg)
                 st.session_state.messages.append({
