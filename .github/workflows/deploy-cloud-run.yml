@@ -5,18 +5,19 @@ on:
     branches:
       - main
     paths:
-      # Application code
       - '**.py'
-      # Dependencies
       - 'requirements.txt'
       - 'pyproject.toml'
-      # Production Docker configuration
       - 'Dockerfile.production'
-      # Streamlit configuration
+      - 'Dockerfile'
+      - '.dockerignore'
       - '.streamlit/**'
-      # GitHub Actions workflow itself
       - '.github/workflows/deploy-cloud-run.yml'
   workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   PROJECT_ID: 'rag-apps-482206'
@@ -55,14 +56,22 @@ jobs:
         run: |
           docker build -f Dockerfile.production \
             -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
-            -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest \
             .
+
+      - name: Scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          format: 'table'
+          exit-code: '1'
+          severity: 'HIGH,CRITICAL'
 
       - name: Push Docker image to Artifact Registry
         run: |
-          docker push --all-tags ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}
+          docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
-      - name: Deploy to Cloud Run
+      - id: deploy
+        name: Deploy to Cloud Run
         run: |
           gcloud run deploy ${{ env.SERVICE_NAME }} \
             --image ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
@@ -87,4 +96,33 @@ jobs:
             --project ${{ env.PROJECT_ID }} \
             --format 'value(status.url)')
           echo "Service deployed to: $SERVICE_URL"
-          curl -sf "$SERVICE_URL/_stcore/health"
+          for i in $(seq 1 6); do
+            if curl -sf "$SERVICE_URL/_stcore/health" > /dev/null 2>&1; then
+              echo "✅ Health check passed"
+              exit 0
+            fi
+            echo "Retry $i/6..."
+            sleep 10
+          done
+          echo "❌ Health check failed after 6 retries"
+          exit 1
+
+      - name: Rollback on verify failure
+        if: failure() && steps.deploy.outcome == 'success'
+        run: |
+          PREVIOUS_REVISION=$(gcloud run revisions list \
+            --service ${{ env.SERVICE_NAME }} \
+            --region ${{ env.REGION }} \
+            --project ${{ env.PROJECT_ID }} \
+            --format 'value(name)' \
+            --sort-by '~metadata.creationTimestamp' \
+            --limit 2 | tail -1)
+          if [ -n "$PREVIOUS_REVISION" ]; then
+            echo "🔄 Rolling back to: $PREVIOUS_REVISION"
+            gcloud run services update-traffic ${{ env.SERVICE_NAME }} \
+              --to-revisions=$PREVIOUS_REVISION=100 \
+              --region ${{ env.REGION }} \
+              --project ${{ env.PROJECT_ID }}
+          else
+            echo "⚠️ No previous revision to roll back to"
+          fi
