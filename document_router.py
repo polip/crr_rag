@@ -24,14 +24,14 @@ class DocumentRouter:
         # Verify required environment variables
         required_vars = ["OPENAI_EMBEDD_KEY", "ASTRA_DB_TOKEN", "ASTRA_DB_API_ENDPOINT", 
                         "ASTRA_DB_COLLECTION_NAME", "OPENAI_CHAT_KEY"]
-        missing_vars = [var for var in required_vars if not os.getenv(var)]
+        missing_vars = [var for var in required_vars if not (os.getenv(var) or "").strip()]
         if missing_vars:
             raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
         
         # Initialize embeddings
         self.embeddings = OpenAIEmbeddings(
             model="text-embedding-3-small",
-            api_key=os.getenv("OPENAI_EMBEDD_KEY")
+            api_key=os.getenv("OPENAI_EMBEDD_KEY", "").strip()
         )
 
         # Connect to Astra DB with timeout
@@ -48,7 +48,7 @@ class DocumentRouter:
         self.llm = ChatOpenAI(  
             model=os.getenv("OPENAI_MODEL_NAME", "gpt-4o-mini"),
             temperature=0.1,
-            api_key=os.getenv("OPENAI_CHAT_KEY")
+            api_key=os.getenv("OPENAI_CHAT_KEY", "").strip()
         )
 
         # Cache available documents (with timeout protection)
