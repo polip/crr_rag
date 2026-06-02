@@ -159,7 +159,20 @@ Question: "Compare requirements across regulations" -> ALL
         Retrieve relevant documents using vector search
         Optionally filter by document IDs or specific article number
         """
-        query_embedding = self.embeddings.embed_query(query)
+        import traceback, sys
+
+        print("🔄 Generating query embedding...")
+        try:
+            query_embedding = self.embeddings.embed_query(query)
+            print(f"✅ Embedding generated, dimension={len(query_embedding)}")
+        except Exception as e:
+            print(f"❌ Embedding failed: {type(e).__name__}: {e}")
+            traceback.print_exc(file=sys.stdout)
+            # Try to print the chained exception if it exists
+            if hasattr(e, '__cause__') and e.__cause__:
+                print(f"  Caused by: {type(e.__cause__).__name__}: {e.__cause__}")
+                traceback.print_exception(type(e.__cause__), e.__cause__, e.__cause__.__traceback__, file=sys.stdout)
+            raise
 
         # Build filter
         filter_query = {}
@@ -169,12 +182,18 @@ Question: "Compare requirements across regulations" -> ALL
             filter_query["metadata.article_number"] = article_number
 
         # Execute search
-        results = self.collection.find(
-            filter=filter_query if filter_query else None,
-            sort={"$vector": query_embedding},
-            limit=k,
-            projection={"content": 1, "metadata": 1, "$vector": 1}
-        )
+        print("🔄 Executing vector search...")
+        try:
+            results = self.collection.find(
+                filter=filter_query if filter_query else None,
+                sort={"$vector": query_embedding},
+                limit=k,
+                projection={"content": 1, "metadata": 1, "$vector": 1}
+            )
+        except Exception as e:
+            print(f"❌ Vector search failed: {type(e).__name__}: {e}")
+            traceback.print_exc(file=sys.stdout)
+            raise
 
         docs = []
         for doc in results:
@@ -182,6 +201,7 @@ Question: "Compare requirements across regulations" -> ALL
                 "content": doc.get("content", ""),
                 "metadata": doc.get("metadata", {})
             })
+        print(f"✅ Vector search returned {len(docs)} docs")
         return docs
 
     def format_docs(self, docs: List[Dict]) -> str:
@@ -216,7 +236,7 @@ Question: "Compare requirements across regulations" -> ALL
         Returns:
             (answer, retrieved_docs, queried_document_ids)
         """
-        import traceback
+        import traceback, sys
 
         # Determine which documents to query
         if specific_documents:
@@ -228,7 +248,7 @@ Question: "Compare requirements across regulations" -> ALL
                 print(f"🎯 Router selected documents: {doc_ids}")
             except Exception as e:
                 print(f"❌ Route query failed: {e}")
-                traceback.print_exc()
+                traceback.print_exc(file=sys.stdout)
                 raise
         else:
             doc_ids = None  # Query all documents
@@ -250,7 +270,7 @@ Question: "Compare requirements across regulations" -> ALL
             print(f"📄 Retrieved {len(docs)} document chunks")
         except Exception as e:
             print(f"❌ Document retrieval failed: {e}")
-            traceback.print_exc()
+            traceback.print_exc(file=sys.stdout)
             raise
 
         # Create answer
@@ -290,7 +310,7 @@ Please provide a comprehensive answer with specific references to documents, art
             print("✅ LLM response generated")
         except Exception as e:
             print(f"❌ LLM invoke failed: {e}")
-            traceback.print_exc()
+            traceback.print_exc(file=sys.stdout)
             raise
 
         return response.content, docs, doc_ids or list(self.available_documents.keys())

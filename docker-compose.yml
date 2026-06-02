@@ -2,7 +2,7 @@ services:
   crr-rag-app:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.production
     container_name: crr-rag-app
     ports:
       - "8501:8501"
